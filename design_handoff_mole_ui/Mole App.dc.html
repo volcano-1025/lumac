@@ -1,0 +1,1412 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+[data-theme="light"]{--bg:#fbfbfc;--panel:#eceef1;--hover:#f2f4f6;--chrome:#eceef1;--fg:#1b1d21;--fg-rgb:27,29,33;--sel-bg:#4a5763;--sel-fg:#ffffff;--desk:#e3e5e9;--menubar:rgba(24,26,30,.88);--accent-text:#3c4855;--accent-soft:rgba(74,87,99,.1);--glass:rgba(246,247,249,.44);--glass-hi:rgba(255,255,255,.9);--glass-line:rgba(27,29,33,.09);--content:rgba(251,251,252,.8);--glass-sheen:linear-gradient(180deg,rgba(255,255,255,.55) 0%,rgba(255,255,255,.12) 42%,rgba(255,255,255,0) 60%,rgba(255,255,255,.18) 100%)}
+[data-theme="dark"]{--bg:#1c1e21;--panel:#17191c;--hover:#24272b;--chrome:#17191c;--fg:#e8eaee;--fg-rgb:232,234,238;--sel-bg:#7d8b99;--sel-fg:#16181b;--desk:#121417;--menubar:rgba(7,8,10,.92);--accent-text:#a8b6c4;--accent-soft:rgba(125,139,153,.18);--glass:rgba(35,38,42,.42);--glass-hi:rgba(255,255,255,.22);--glass-line:rgba(240,237,230,.1);--content:rgba(31,30,28,.74);--glass-sheen:linear-gradient(180deg,rgba(255,255,255,.14) 0%,rgba(255,255,255,.03) 42%,rgba(255,255,255,0) 60%,rgba(255,255,255,.05) 100%)}
+body{margin:0;background:#e3e5e9;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--fg);text-decoration:none}
+a:hover{color:var(--accent-text)}
+@keyframes molePulse{0%{opacity:.35}50%{opacity:1}100%{opacity:.35}}
+@keyframes moleRise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes moleBob{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(-1.6px) rotate(-2deg)}}
+@keyframes moleLegA{0%,100%{transform:rotate(-24deg)}50%{transform:rotate(24deg)}}
+@keyframes moleLegB{0%,100%{transform:rotate(24deg)}50%{transform:rotate(-24deg)}}
+@keyframes moleClaw{0%,100%{transform:rotate(-14deg)}50%{transform:rotate(16deg)}}
+</style>
+</helmet>
+<div style="min-height:100vh;min-width:max-content;display:flex;align-items:center;justify-content:safe center;padding:56px 36px 36px;position:relative;background: {{ deskBg }}" data-theme="{{ theme }}">
+
+  <div style="position:absolute;top:0;left:0;right:0;height:26px;background:var(--menubar);display:flex;align-items:center;padding:0 14px;gap:18px;color:rgba(255,255,255,.9);font-size:11.5px">
+    <span style="font-weight:600">Finder</span>
+    <span style="opacity:.6">文件</span><span style="opacity:.6">编辑</span><span style="opacity:.6">显示</span>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:14px">
+      <span onClick="{{ toggleHud }}" style="display:flex;align-items:center;gap:6px;padding:2px 7px;border-radius:6px;cursor:pointer;background: {{ hudChipBg }}">
+        <img src="assets/mole.png" alt="Mole" style="display:block;width:21px;height:13.2px;opacity:.94;transform-origin:62% 100%;animation:moleBob {{ runDur }} ease-in-out infinite">
+        <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;line-height:1.15;display:flex;flex-direction:column;align-items:flex-start">
+          <span>↓ {{ netDown }}</span>
+          <span style="opacity:.7">↑ {{ netUp }}</span>
+        </span>
+      </span>
+      <span style="opacity:.75">100%</span>
+      <span style="font-family:'JetBrains Mono',ui-monospace,monospace;opacity:.85">{{ clock }}</span>
+    </div>
+  </div>
+
+  <sc-if value="{{ hudOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;top:32px;right:14px;width:296px;z-index:5;background:var(--glass);backdrop-filter:blur(34px) saturate(180%);-webkit-backdrop-filter:blur(34px) saturate(180%);border-radius:18px;box-shadow:inset 0 .5px 0 var(--glass-hi),0 0 0 .5px var(--glass-line);padding:16px;box-shadow:0 20px 46px rgba(var(--fg-rgb),.26);animation:moleRise .18s ease">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:26px;height:26px;border-radius:8px;background:var(--sel-bg);display:flex;align-items:center;justify-content:center">
+          <img src="assets/mole.png" alt="Mole" style="display:block;width:18px;height:11.3px">
+        </div>
+        <div style="font-size:12.5px;font-weight:600;color:var(--fg)">Mole</div>
+        <div style="margin-left:auto;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:var(--accent-text)">健康 {{ health }}</div>
+      </div>
+      <div style="margin-top:14px;display:flex;flex-direction:column;gap:11px">
+        <sc-for list="{{ hudMeters }}" as="m" hint-placeholder-count="3">
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:11.5px;color:rgba(var(--fg-rgb),.6)">
+              <span>{{ m.label }}</span><span style="font-family:'JetBrains Mono',ui-monospace,monospace;color:var(--fg)">{{ m.value }}</span>
+            </div>
+            <div style="margin-top:6px;height:4px;border-radius:2px;background:rgba(var(--fg-rgb),.09);overflow:hidden"><div style="height:100%;border-radius:2px;transition:width .8s linear;background: {{ m.fill }};width: {{ m.w }}"></div></div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:rgba(var(--fg-rgb),.6)">{{ runNote }}</div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(var(--fg-rgb),.1)">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;font-size:11px;color:rgba(var(--fg-rgb),.6)">
+          <span>占用最高的 12 个进程</span><span style="font-family:'JetBrains Mono',ui-monospace,monospace">CPU · 内存</span>
+        </div>
+        <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px">
+          <sc-for list="{{ hudProcs }}" as="p" hint-placeholder-count="12">
+            <div style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--fg)">
+              <span style="width:11px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10px;color:rgba(var(--fg-rgb),.3)">{{ p.i }}</span>
+              <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.name }}</span>
+              <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;color: {{ p.cpuFg }};width:40px;text-align:right">{{ p.cpu }}</span>
+              <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;color:rgba(var(--fg-rgb),.6);width:48px;text-align:right">{{ p.mem }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+<div style="width:1180px;flex:none;height:772px;background:transparent;border-radius:19px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 32px 80px rgba(var(--fg-rgb),.28),0 2px 6px rgba(var(--fg-rgb),.14);position:relative">
+
+  <div style="height:52px;flex:none;position:relative;display:flex;align-items:center;gap:14px;padding:0 16px;background:var(--glass);backdrop-filter:blur(44px) saturate(200%) brightness(1.06);-webkit-backdrop-filter:blur(44px) saturate(200%) brightness(1.06);border-bottom:.5px solid var(--glass-line);box-shadow:inset 0 .8px 0 var(--glass-hi),inset 0 -6px 14px -10px rgba(var(--fg-rgb),.5)" style-before="content:'';position:absolute;left:0;right:0;top:0;height:52px;pointer-events:none;background:var(--glass-sheen)">
+    <div style="display:flex;gap:8px">
+      <div style="width:12px;height:12px;border-radius:50%;background:#ff5f57"></div>
+      <div style="width:12px;height:12px;border-radius:50%;background:#febc2e"></div>
+      <div style="width:12px;height:12px;border-radius:50%;background:#28c840"></div>
+    </div>
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:9px;font-size:13px;font-weight:600;color:var(--fg)">Mole<span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;font-weight:500;color:rgba(var(--fg-rgb),.6)">{{ hostLabel }}</span></div>
+    <div style="position:relative;display:flex;align-items:center;height:30px;padding:0 2px;gap:2px;border-radius:15px;background:rgba(255,255,255,.22);backdrop-filter:blur(14px) saturate(180%);-webkit-backdrop-filter:blur(14px) saturate(180%);box-shadow:inset 0 .8px 0 var(--glass-hi),inset 0 -1px 1px rgba(var(--fg-rgb),.06),0 0 0 .5px var(--glass-line),0 1px 3px rgba(var(--fg-rgb),.1)">
+      <div onClick="{{ goSettings }}" title="设置" style="width:32px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:13px;color:rgba(var(--fg-rgb),.62);cursor:pointer" style-hover="background:rgba(var(--fg-rgb),.09);color:var(--fg)">
+        <svg viewBox="0 0 24 24" style="width:15px;height:15px;opacity:.75" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="{{ gearIcon }}"></path></svg>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex:1;min-height:0;display:flex">
+
+    <div style="width:232px;flex:none;position:relative;background:var(--glass);backdrop-filter:blur(44px) saturate(200%) brightness(1.06);-webkit-backdrop-filter:blur(44px) saturate(200%) brightness(1.06);border-right:.5px solid var(--glass-line);box-shadow:inset .8px 0 0 var(--glass-hi);display:flex;flex-direction:column;padding:14px 0 0" style-before="content:'';position:absolute;inset:0;pointer-events:none;background:linear-gradient(135deg,rgba(255,255,255,.28) 0%,rgba(255,255,255,.04) 30%,rgba(255,255,255,0) 55%)">
+      <div style="padding:0 16px 16px;display:flex;align-items:center;gap:10px">
+        <div style="width:30px;height:30px;border-radius:9px;background:var(--sel-bg);display:flex;align-items:center;justify-content:center">
+          <img src="assets/mole.png" alt="Mole" style="display:block;width:21px;height:13.2px">
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--fg);line-height:1.25">Mole</div>
+          <div style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10px;color:rgba(var(--fg-rgb),.6)">v1.0.0</div>
+        </div>
+      </div>
+
+      <div style="flex:1;overflow-y:auto;padding:0 8px 8px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div style="padding:0 10px 6px;font-size:11.5px;font-weight:600;letter-spacing:0;color:rgba(var(--fg-rgb),.6)">状态</div>
+          <sc-for list="{{ navMain }}" as="item" hint-placeholder-count="1">
+            <div onClick="{{ item.go }}" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:9px;cursor:pointer;font-size:13px;background: {{ item.bg }};color: {{ item.fg }};font-weight: {{ item.fw }}" style-hover="background:rgba(var(--fg-rgb),.05)">
+              <svg viewBox="0 0 24 24" style="width:16px;height:16px;flex:none;opacity:.75" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="{{ item.icon }}"></path></svg>{{ item.label }}
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div style="padding:0 10px 6px;font-size:11.5px;font-weight:600;letter-spacing:0;color:rgba(var(--fg-rgb),.6)">清理</div>
+          <sc-for list="{{ navAct }}" as="item" hint-placeholder-count="5">
+            <div onClick="{{ item.go }}" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:9px;cursor:pointer;font-size:13px;background: {{ item.bg }};color: {{ item.fg }};font-weight: {{ item.fw }}" style-hover="background:rgba(var(--fg-rgb),.05)">
+              <svg viewBox="0 0 24 24" style="width:16px;height:16px;flex:none;opacity:.75" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="{{ item.icon }}"></path></svg>{{ item.label }}
+              <span style="margin-left:auto;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10px;color: {{ item.badgeFg }}">{{ item.badge }}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div style="padding:0 10px 6px;font-size:11.5px;font-weight:600;letter-spacing:0;color:rgba(var(--fg-rgb),.6)">洞察</div>
+          <sc-for list="{{ navIns }}" as="item" hint-placeholder-count="2">
+            <div onClick="{{ item.go }}" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:9px;cursor:pointer;font-size:13px;background: {{ item.bg }};color: {{ item.fg }};font-weight: {{ item.fw }}" style-hover="background:rgba(var(--fg-rgb),.05)">
+              <svg viewBox="0 0 24 24" style="width:16px;height:16px;flex:none;opacity:.75" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="{{ item.icon }}"></path></svg>{{ item.label }}
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="flex:none;padding:10px 16px;border-top:1px solid rgba(var(--fg-rgb),.08);display:flex;align-items:center;gap:8px">
+        <div style="width:7px;height:7px;border-radius:50%;background:var(--sel-bg);animation:molePulse 2.4s ease-in-out infinite"></div>
+        <div style="font-size:11px;color:rgba(var(--fg-rgb),.64)">CLI 已就绪</div>
+        <div style="margin-left:auto;font-size:11px;color:rgba(var(--fg-rgb),.58)">CLI v1.41.0</div>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:var(--content)">
+
+      <div style="flex:none;position:relative;z-index:2;padding:22px 26px 16px;display:flex;align-items:flex-end;gap:16px;border-bottom:.5px solid rgba(var(--fg-rgb),.1);box-shadow:0 6px 12px -8px rgba(var(--fg-rgb),.14)">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:19px;font-weight:650;color:var(--fg);letter-spacing:-.01em">{{ pageTitle }}</div>
+          <div style="margin-top:4px;font-size:12px;color:rgba(var(--fg-rgb),.52);text-wrap:pretty">{{ pageSub }}</div>
+        </div>
+        <sc-if value="{{ showScanBtn }}" hint-placeholder-val="{{ true }}">
+          <div onClick="{{ startScan }}" style="flex:none;height:32px;padding:0 15px;display:flex;align-items:center;gap:8px;border-radius:8px;background:var(--sel-bg);color:var(--sel-fg);font-size:12.5px;font-weight:550;cursor:pointer" style-hover="background:#33312c">
+            <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;opacity:.7">--dry-run</span>{{ scanBtnLabel }}
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="flex:1;min-height:0;overflow-y:auto;padding:20px 26px 26px">
+
+        <sc-if value="{{ isIdle }}" hint-placeholder-val="{{ false }}">
+          <div style="height:100%;min-height:360px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center">
+            <div style="width:54px;height:54px;border-radius:16px;background:var(--panel);display:flex;align-items:center;justify-content:center;color:rgba(var(--fg-rgb),.45)"><svg viewBox="0 0 24 24" style="width:25px;height:25px" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="{{ idleIcon }}"></path></svg></div>
+            <div style="max-width:340px">
+              <div style="font-size:14px;font-weight:600;color:var(--fg)">{{ idleTitle }}</div>
+              <div style="margin-top:6px;font-size:12px;line-height:1.6;color:rgba(var(--fg-rgb),.52);text-wrap:pretty">{{ idleBody }}</div>
+            </div>
+            <div onClick="{{ startScan }}" style="height:34px;padding:0 18px;display:flex;align-items:center;border-radius:9px;background:var(--sel-bg);color:var(--sel-fg);font-size:13px;font-weight:550;cursor:pointer" style-hover="background:#33312c">开始扫描</div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isDenied }}" hint-placeholder-val="{{ false }}">
+          <div style="height:100%;min-height:360px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center">
+            <div style="width:54px;height:54px;border-radius:16px;background:rgba(168,65,44,.09);display:flex;align-items:center;justify-content:center;font-size:22px;color:#a8412c">!</div>
+            <div style="max-width:380px">
+              <div style="font-size:14px;font-weight:600;color:var(--fg)">还差一个权限</div>
+              <div style="margin-top:6px;font-size:12px;line-height:1.6;color:rgba(var(--fg-rgb),.52);text-wrap:pretty">系统限制了对部分文件夹的访问，Mole 只能看到一半的缓存。在「系统设置 › 隐私与安全性 › 完全磁盘访问权限」里打开 Mole 之后再试一次。</div>
+            </div>
+            <div style="display:flex;gap:10px">
+              <div onClick="{{ clearDemo }}" style="height:34px;padding:0 16px;display:flex;align-items:center;border-radius:9px;border:1px solid rgba(var(--fg-rgb),.13);font-size:13px;color:var(--fg);cursor:pointer" style-hover="background:var(--hover)">先跳过</div>
+              <div onClick="{{ clearDemo }}" style="height:34px;padding:0 18px;display:flex;align-items:center;border-radius:9px;background:var(--sel-bg);color:var(--sel-fg);font-size:13px;font-weight:550;cursor:pointer" style-hover="background:#33312c">打开系统设置</div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isFail }}" hint-placeholder-val="{{ false }}">
+          <div style="height:100%;min-height:360px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center">
+            <div style="width:54px;height:54px;border-radius:16px;background:var(--panel);display:flex;align-items:center;justify-content:center;font-size:22px;color:rgba(var(--fg-rgb),.45)">✕</div>
+            <div style="max-width:380px">
+              <div style="font-size:14px;font-weight:600;color:var(--fg)">这次没能扫完</div>
+              <div style="margin-top:6px;font-size:12px;line-height:1.6;color:rgba(var(--fg-rgb),.52);text-wrap:pretty">有 3 个目录正在被其他程序占用，已经跳过。你可以关掉相关应用后重试，也可以先处理已经扫到的部分。</div>
+            </div>
+            <div style="display:flex;gap:10px">
+              <div onClick="{{ showFailDetail }}" style="height:34px;padding:0 16px;display:flex;align-items:center;border-radius:9px;border:1px solid rgba(var(--fg-rgb),.13);font-size:13px;color:var(--fg);cursor:pointer" style-hover="background:var(--hover)">查看详情</div>
+              <div onClick="{{ retryScan }}" style="height:34px;padding:0 18px;display:flex;align-items:center;border-radius:9px;background:var(--sel-bg);color:var(--sel-fg);font-size:13px;font-weight:550;cursor:pointer" style-hover="background:#33312c">重试</div>
+            </div>
+            <sc-if value="{{ failDetail }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:2px;width:420px;text-align:left;border:1px solid rgba(var(--fg-rgb),.1);border-radius:10px;padding:12px 14px;font-size:11.5px;line-height:1.9;color:rgba(var(--fg-rgb),.55)">
+                Xcode 正在使用 DerivedData · 已跳过<br>
+                Docker Desktop 正在运行 · 已跳过<br>
+                Photos 图库正在同步 · 已跳过
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="height:100%;min-height:360px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center">
+            <img src="assets/mole.png" alt="Mole" style="width:76px;height:47.8px;filter:invert(1);opacity:.14">
+            <div style="max-width:340px">
+              <div style="font-size:14px;font-weight:600;color:var(--fg)">这里已经很干净了</div>
+              <div style="margin-top:6px;font-size:12px;line-height:1.6;color:rgba(var(--fg-rgb),.52);text-wrap:pretty">没有找到值得清理的东西。上次清理是 3 小时前，释放了 78.3 GB。</div>
+            </div>
+            <div onClick="{{ clearDemo }}" style="height:34px;padding:0 18px;display:flex;align-items:center;border-radius:9px;border:1px solid rgba(var(--fg-rgb),.13);font-size:13px;color:var(--fg);cursor:pointer" style-hover="background:var(--hover)">好的</div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isScanning }}" hint-placeholder-val="{{ false }}">
+          <div style="max-width:520px;margin:80px auto 0;text-align:center">
+            <div style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:rgba(var(--fg-rgb),.6)">{{ scanLine }}</div>
+            <div style="margin-top:14px;height:4px;border-radius:2px;background:rgba(var(--fg-rgb),.09);overflow:hidden">
+              <div style="height:100%;border-radius:2px;background:var(--sel-bg);transition:width .28s ease;width: {{ progressW }}"></div>
+            </div>
+            <div style="margin-top:10px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:rgba(var(--fg-rgb),.4)">{{ progressW }}</div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isReady }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:12px;animation:moleRise .3s ease">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div onClick="{{ toggleAll }}" style="height:26px;padding:0 10px;display:flex;align-items:center;gap:7px;border-radius:7px;border:1px solid rgba(var(--fg-rgb),.12);font-size:11.5px;color:rgba(var(--fg-rgb),.62);cursor:pointer" style-hover="background:var(--hover);color:var(--fg)">{{ toggleAllLabel }}</div>
+              <div style="font-size:11.5px;color:rgba(var(--fg-rgb),.6)">{{ readyMeta }}</div>
+              <div style="margin-left:auto;display:flex;align-items:baseline;gap:6px">
+                <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:20px;font-weight:600;color:var(--fg)">{{ selSize }}</span>
+                <span style="font-size:11.5px;color:rgba(var(--fg-rgb),.6)">可释放</span>
+              </div>
+            </div>
+
+            <div style="border:.5px solid rgba(var(--fg-rgb),.15);border-radius:13px;overflow:hidden">
+              <sc-for list="{{ rows }}" as="row" hint-placeholder-count="6">
+                <div onClick="{{ row.toggle }}" style="display:flex;align-items:center;gap:12px;padding:15px 14px;cursor:pointer;border-top: {{ row.sep }};background: {{ row.rowBg }}" style-hover="background:var(--hover)">
+                  <div style="width:16px;height:16px;flex:none;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--sel-fg);background: {{ row.boxBg }};border:1.5px solid {{ row.boxBorder }}">{{ row.mark }}</div>
+                  <div style="flex:1;min-width:0">
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <span style="font-size:13px;font-weight:550;color:var(--fg)">{{ row.name }}</span>
+                      <span style="font-size:10px;padding:1.5px 6px;border-radius:5px;background: {{ row.tagBg }};color: {{ row.tagFg }}">{{ row.tag }}</span>
+                    </div>
+                    <div style="margin-top:3px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;color:rgba(var(--fg-rgb),.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ row.meta }}</div>
+                  </div>
+                  <div style="width:150px;flex:none;height:5px;border-radius:3px;background:rgba(var(--fg-rgb),.07);overflow:hidden">
+                    <div style="height:100%;border-radius:3px;background: {{ row.barFill }};width: {{ row.barW }}"></div>
+                  </div>
+                  <div style="width:74px;flex:none;text-align:right;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px;font-weight:500;color:var(--fg)">{{ row.size }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isRunning }}" hint-placeholder-val="{{ false }}">
+          <div style="max-width:640px;margin:40px auto 0">
+            <div style="display:flex;align-items:baseline;justify-content:space-between">
+              <div style="font-size:14px;font-weight:600;color:var(--fg)">{{ runTitle }}</div>
+              <div style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:rgba(var(--fg-rgb),.6)">{{ progressW }}</div>
+            </div>
+            <div style="margin-top:12px;height:4px;border-radius:2px;background:rgba(var(--fg-rgb),.09);overflow:hidden">
+              <div style="height:100%;border-radius:2px;background:var(--sel-bg);transition:width .3s ease;width: {{ progressW }}"></div>
+            </div>
+            <div style="margin-top:20px;display:flex;flex-direction:column;gap:2px">
+              <sc-for list="{{ steps }}" as="s" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:11px;padding:10px 2px;font-size:13px;color: {{ s.fg }}">
+                  <span style="width:14px;text-align:center;font-size:11px">{{ s.mark }}</span>
+                  <span style="flex:1;min-width:0">{{ s.label }}</span>
+                  <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px">{{ s.size }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isDone }}" hint-placeholder-val="{{ false }}">
+          <div style="max-width:520px;margin:70px auto 0;text-align:center;animation:moleRise .35s ease">
+            <div style="width:56px;height:56px;margin:0 auto;border-radius:50%;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--accent-text)">✓</div>
+            <div style="margin-top:16px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:34px;font-weight:600;color:var(--fg);letter-spacing:-.02em">{{ doneSize }}</div>
+            <div style="margin-top:6px;font-size:13px;color:rgba(var(--fg-rgb),.55)">{{ doneText }}</div>
+            <div style="margin-top:22px;display:flex;gap:10px;justify-content:center">
+              <div onClick="{{ undo }}" style="height:32px;padding:0 15px;display:flex;align-items:center;border-radius:8px;border:1px solid rgba(var(--fg-rgb),.13);font-size:12.5px;color:var(--fg);cursor:pointer" style-hover="background:var(--hover)">撤销</div>
+              <div onClick="{{ goHistory }}" style="height:32px;padding:0 15px;display:flex;align-items:center;border-radius:8px;border:1px solid rgba(var(--fg-rgb),.13);font-size:12.5px;color:var(--fg);cursor:pointer" style-hover="background:var(--hover)">查看记录</div>
+              <div onClick="{{ startScan }}" style="height:32px;padding:0 15px;display:flex;align-items:center;border-radius:8px;background:var(--sel-bg);color:var(--sel-fg);font-size:12.5px;font-weight:550;cursor:pointer" style-hover="background:#33312c">再次检查</div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isStatus }}" hint-placeholder-val="{{ true }}">
+          <div style="height:100%;display:flex;flex-direction:column;gap:14px">
+            <div style="flex:none;display:flex;gap:14px;align-items:stretch">
+              <div style="flex:none;width:250px;padding:18px;border:.5px solid rgba(var(--fg-rgb),.15);border-radius:14px;display:flex;flex-direction:column;justify-content:space-between">
+                <div style="font-size:11.5px;font-weight:600;letter-spacing:0;color:rgba(var(--fg-rgb),.55)">健康评分</div>
+                <div style="display:flex;align-items:baseline;gap:8px;margin-top:10px">
+                  <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:52px;font-weight:600;line-height:1;color:var(--accent-text)">{{ health }}</span>
+                  <span style="font-size:12px;color:rgba(var(--fg-rgb),.6)">/ 100 良好</span>
+                </div>
+                <div style="margin-top:14px;height:5px;border-radius:3px;background:rgba(var(--fg-rgb),.08);overflow:hidden">
+                  <div style="height:100%;border-radius:3px;background:var(--sel-bg);transition:width .6s ease;width: {{ healthW }}"></div>
+                </div>
+                <div style="margin-top:12px;font-size:11.5px;line-height:1.6;color:rgba(var(--fg-rgb),.5)">MacBook Pro · M4 Pro<br>32GB · macOS 15.4 · 已运行 6 天</div>
+              </div>
+
+              <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:14px">
+                <sc-for list="{{ meters }}" as="m" hint-placeholder-count="4">
+                  <div style="padding:14px 16px;border:.5px solid rgba(var(--fg-rgb),.15);border-radius:14px">
+                    <div style="display:flex;align-items:center;justify-content:space-between">
+                      <span style="font-size:11.5px;font-weight:600;color:rgba(var(--fg-rgb),.55)">{{ m.label }}</span>
+                      <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:15px;font-weight:600;color:var(--fg)">{{ m.value }}</span>
+                    </div>
+                    <div style="margin-top:11px;height:5px;border-radius:3px;background:rgba(var(--fg-rgb),.08);overflow:hidden">
+                      <div style="height:100%;border-radius:3px;transition:width .8s linear;background: {{ m.fill }};width: {{ m.w }}"></div>
+                    </div>
+                    <div style="margin-top:9px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;color:rgba(var(--fg-rgb),.6)">{{ m.sub }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="flex:none;display:flex;gap:14px">
+              <div style="flex:1;padding:16px;border:.5px solid rgba(var(--fg-rgb),.15);border-radius:14px;display:flex;flex-direction:column">
+                <div style="font-size:11.5px;font-weight:600;color:rgba(var(--fg-rgb),.55)">网络</div>
+                <div style="margin-top:12px;display:flex;align-items:flex-end;gap:3px;height:31px">
+                  <sc-for list="{{ spark }}" as="b" hint-placeholder-count="24">
+                    <div style="flex:1;border-radius:2px;background:rgba(var(--fg-rgb),.22);height: {{ b.h }}"></div>
+                  </sc-for>
+                </div>
+                <div style="margin-top:10px;display:flex;gap:18px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:rgba(var(--fg-rgb),.55)">
+                  <span>↓ {{ netDown }}</span><span>↑ {{ netUp }}</span><span>Wi-Fi · 192.168.1.100</span>
+                </div>
+                <div style="margin-top:auto;padding-top:2px;border-top:1px solid rgba(var(--fg-rgb),.08);display:flex;align-items:baseline;justify-content:space-between">
+                  <sc-for list="{{ netTotals }}" as="t" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:baseline;gap:5px">
+                      <span style="font-size:10px;color:rgba(var(--fg-rgb),.6)">{{ t.label }}</span>
+                      <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;font-weight:600;color: {{ t.fg }}">{{ t.value }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="flex:1;padding:16px;border:.5px solid rgba(var(--fg-rgb),.15);border-radius:14px;display:flex;flex-direction:column">
+                <div style="display:flex;align-items:center;justify-content:space-between">
+                  <span style="font-size:11.5px;font-weight:600;color:rgba(var(--fg-rgb),.55)">电池</span>
+                  <span style="font-size:10.5px;padding:2px 8px;border-radius:6px;background:var(--accent-soft);color:var(--accent-text);font-family:'JetBrains Mono',ui-monospace,monospace">58°C</span>
+                </div>
+                <div style="margin-top:12px;display:flex;align-items:center;gap:16px">
+                  <div style="flex:1;min-width:0">
+                    <div style="display:flex;align-items:baseline;gap:8px">
+                      <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:30px;font-weight:600;line-height:1;color:var(--fg);letter-spacing:-.02em">100%</span>
+                      <span style="font-size:11.5px;color:rgba(var(--fg-rgb),.5)">电源供电 · 90W</span>
+                    </div>
+                    <div style="margin-top:8px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:rgba(var(--fg-rgb),.6)">423 次循环 · 健康 88%</div>
+                  </div>
+                  <div style="flex:none;display:flex;gap:6px">
+                    <sc-for list="{{ powerDevices }}" as="d" hint-placeholder-count="4">
+                      <div style="width:44px;display:flex;flex-direction:column;align-items:center;gap:3px">
+                        <div style="position:relative;width:38px;height:38px">
+                          <svg viewBox="0 0 40 40" width="38" height="38" style="display:block;transform:rotate(-90deg)">
+                          <circle cx="20" cy="20" r="17" fill="none" stroke="rgba(var(--fg-rgb),.09)" stroke-width="3.5"></circle>
+                          <circle cx="20" cy="20" r="17" fill="none" stroke="{{ d.fill }}" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="107" stroke-dashoffset="{{ d.off }}"></circle>
+                          </svg>
+                          <svg viewBox="0 0 16 16" style="position:absolute;top:11px;left:11px;width:16px;height:16px;color:rgba(var(--fg-rgb),.6)"><path d="{{ d.d }}" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                        </div>
+                        <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10px;color:rgba(var(--fg-rgb),.6)">{{ d.value }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+                <div style="margin-top:auto;padding-top:2px;border-top:1px solid rgba(var(--fg-rgb),.08);font-size:11px;color:rgba(var(--fg-rgb),.5)">最大消耗 <span style="font-family:'JetBrains Mono',ui-monospace,monospace">Chrome · 28.3%</span></div>
+              </div>
+            </div>
+
+            <div style="flex:1;min-height:0;display:flex;flex-direction:column;border:.5px solid rgba(var(--fg-rgb),.15);border-radius:14px;overflow:hidden">
+              <div style="flex:none;display:flex;align-items:center;gap:12px;padding:11px 16px;background:rgba(var(--fg-rgb),.025);border-bottom:1px solid rgba(var(--fg-rgb),.08)">
+                <span style="flex:1;min-width:0;font-size:11.5px;font-weight:600;color:rgba(var(--fg-rgb),.55)">占用最高的进程</span>
+                <sc-for list="{{ procCols }}" as="c" hint-placeholder-count="3">
+                  <span onClick="{{ c.go }}" style="width: {{ c.w }};flex:none;display:flex;align-items:center;justify-content:flex-end;gap:4px;font-size:11px;font-weight:600;cursor:pointer;color: {{ c.fg }}" style-hover="color:var(--fg)">
+                    <span style="font-size:8px">{{ c.arrow }}</span>{{ c.label }}
+                  </span>
+                </sc-for>
+                <span style="width:26px;flex:none"></span>
+              </div>
+              <div style="flex:1;min-height:0;overflow-y:auto;scrollbar-width:none">
+                <sc-for list="{{ procs }}" as="p" hint-placeholder-count="16">
+                  <div style="display:flex;align-items:center;gap:12px;padding:7px 16px;border-top: {{ p.sep }};background: {{ p.bg }}" style-hover="background:rgba(var(--fg-rgb),.045)">
+                    <span style="flex:1;min-width:0;font-size:12px;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p.name }}</span>
+                    <div style="width:116px;flex:none;display:flex;align-items:center;gap:9px">
+                      <div style="flex:1;height:5px;border-radius:3px;background:rgba(var(--fg-rgb),.08);overflow:hidden"><div style="height:100%;border-radius:3px;background:rgba(var(--fg-rgb),.42);transition:width .8s linear;width: {{ p.w }}"></div></div>
+                      <span style="width:38px;text-align:right;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;color:var(--fg)">{{ p.cpu }}</span>
+                    </div>
+                    <span style="width:62px;flex:none;text-align:right;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;color:rgba(var(--fg-rgb),.55)">{{ p.energy }}</span>
+                    <span style="width:70px;flex:none;text-align:right;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;color:rgba(var(--fg-rgb),.55)">{{ p.mem }}</span>
+                    <span onClick="{{ p.kill }}" style="width:26px;flex:none;display:flex;align-items:center;justify-content:center;height:18px;border-radius:5px;font-size:11px;color:rgba(var(--fg-rgb),.32);cursor:pointer" style-hover="background:rgba(168,65,44,.12);color:#a8412c">✕</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isAnalyze }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="flex:1;display:flex;align-items:center;gap:6px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:rgba(var(--fg-rgb),.6)">
+                <sc-for list="{{ crumbs }}" as="c" hint-placeholder-count="2">
+                  <span onClick="{{ c.go }}" style="cursor:pointer;color: {{ c.fg }}" style-hover="color:var(--fg)">{{ c.label }}</span>
+                </sc-for>
+              </div>
+              <sc-for list="{{ analyzeTabs }}" as="t" hint-placeholder-count="2">
+                <div onClick="{{ t.go }}" style="height:26px;padding:0 11px;display:flex;align-items:center;border-radius:7px;font-size:11.5px;cursor:pointer;background: {{ t.bg }};color: {{ t.fg }}" style-hover="opacity:.85">{{ t.label }}</div>
+              </sc-for>
+              <div style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:rgba(var(--fg-rgb),.5)">合计 {{ analyzeTotal }}</div>
+            </div>
+            <div style="border:.5px solid rgba(var(--fg-rgb),.15);border-radius:13px;overflow:hidden">
+              <sc-for list="{{ diskRows }}" as="d" hint-placeholder-count="5">
+                <div onClick="{{ d.open }}" style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-top: {{ d.sep }};cursor:pointer" style-hover="background:var(--hover)">
+                  <span style="width:20px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:rgba(var(--fg-rgb),.58)">{{ d.idx }}</span>
+                  <svg viewBox="0 0 24 24" style="width:14px;height:14px;flex:none;color:rgba(var(--fg-rgb),.6)" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="{{ d.icon }}"></path></svg>
+                  <span style="flex:1;min-width:150px;font-size:13px;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ d.name }}</span>
+                  <span style="font-size:10px;padding:1.5px 6px;border-radius:5px;background: {{ d.tagBg }};color: {{ d.tagFg }}">{{ d.tag }}</span>
+                  <div style="width:240px;flex:none;height:7px;border-radius:4px;background:rgba(var(--fg-rgb),.07);overflow:hidden"><div style="height:100%;border-radius:4px;background:rgba(var(--fg-rgb),.55);width: {{ d.barW }}"></div></div>
+                  <span style="width:52px;text-align:right;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:rgba(var(--fg-rgb),.5)">{{ d.pct }}</span>
+                  <span style="width:70px;text-align:right;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px;font-weight:500;color:var(--fg)">{{ d.size }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:11.5px;color:rgba(var(--fg-rgb),.6)">删除在这里等于「移入废纸篓」，由 Finder 执行，可随时还原。</div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:22px;max-width:760px">
+            <sc-for list="{{ settingGroups }}" as="g" hint-placeholder-count="4">
+              <div>
+                <div style="font-size:12.5px;font-weight:650;letter-spacing:0;color:rgba(var(--fg-rgb),.52);margin-bottom:9px">{{ g.title }}</div>
+                <div style="border:.5px solid rgba(var(--fg-rgb),.15);border-radius:13px;overflow:hidden">
+                  <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:center;gap:16px;padding:15px 15px;border-top: {{ it.sep }}">
+                      <div style="flex:1;min-width:0">
+                        <div style="font-size:13px;font-weight:550;color: {{ it.fg }}">{{ it.label }}</div>
+                        <div style="margin-top:3px;font-size:11.5px;color:rgba(var(--fg-rgb),.48);text-wrap:pretty">{{ it.desc }}</div>
+                      </div>
+                      <div onClick="{{ it.act }}" style="flex:none;height:27px;padding:0 12px;display:flex;align-items:center;border-radius:7px;font-size:11.5px;font-weight:550;cursor:pointer;border:1px solid {{ it.btnBorder }};background: {{ it.btnBg }};color: {{ it.btnFg }}" style-hover="opacity:.82">{{ it.action }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isUpdates }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:22px">
+            <sc-for list="{{ updGroups }}" as="g" hint-placeholder-count="2">
+              <div>
+                <div style="display:flex;align-items:baseline;gap:9px;padding:0 2px 9px">
+                  <span style="font-size:12.5px;font-weight:600;color:var(--fg)">{{ g.title }}</span>
+                  <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;color:rgba(var(--fg-rgb),.4)">{{ g.count }}</span>
+                  <sc-if value="{{ g.hasAll }}" hint-placeholder-val="{{ false }}">
+                    <div onClick="{{ g.updateAll }}" style="margin-left:auto;font-size:12px;font-weight:600;color:var(--accent-text);cursor:pointer" style-hover="opacity:.7">全部更新</div>
+                  </sc-if>
+                </div>
+                <div style="border:.5px solid rgba(var(--fg-rgb),.15);border-radius:13px;overflow:hidden">
+                  <sc-for list="{{ g.apps }}" as="a" hint-placeholder-count="4">
+                    <div style="display:flex;align-items:center;gap:13px;padding:11px 14px;border-top: {{ a.sep }}" style-hover="background:var(--hover)">
+                      <div style="flex:none;width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:#fff;background: {{ a.iconBg }}">{{ a.initial }}</div>
+                      <div style="flex:1;min-width:0">
+                        <div style="display:flex;align-items:center;gap:8px">
+                          <span style="font-size:13px;font-weight:600;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ a.name }}</span>
+                          <span style="flex:none;font-size:10px;padding:1.5px 6px;border-radius:5px;background:rgba(var(--fg-rgb),.07);color:rgba(var(--fg-rgb),.55)">{{ a.source }}</span>
+                        </div>
+                        <div style="margin-top:3px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:rgba(var(--fg-rgb),.6)">
+                          {{ a.from }}<span style="color: {{ a.toFg }}">{{ a.to }}</span>
+                        </div>
+                      </div>
+                      <sc-if value="{{ a.pending }}" hint-placeholder-val="{{ true }}">
+                        <div style="flex:none;display:flex;align-items:center;gap:12px">
+                          <div onClick="{{ a.ignore }}" style="font-size:11.5px;color:rgba(var(--fg-rgb),.55);cursor:pointer" style-hover="color:var(--fg)">忽略更新</div>
+                          <div onClick="{{ a.update }}" style="height:28px;padding:0 15px;display:flex;align-items:center;border-radius:14px;background:var(--sel-bg);color:var(--sel-fg);font-size:12px;font-weight:600;cursor:pointer" style-hover="opacity:.86">更新</div>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ a.busy }}" hint-placeholder-val="{{ false }}">
+                        <div style="flex:none;width:118px;display:flex;align-items:center;gap:9px">
+                          <div style="flex:1;height:4px;border-radius:2px;background:rgba(var(--fg-rgb),.1);overflow:hidden"><div style="height:100%;border-radius:2px;background:var(--sel-bg);transition:width .4s ease;width: {{ a.progressW }}"></div></div>
+                          <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;color:rgba(var(--fg-rgb),.6)">{{ a.progressW }}</span>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ a.settled }}" hint-placeholder-val="{{ false }}">
+                        <div style="flex:none;font-size:11.5px;color: {{ a.settledFg }}">{{ a.settledText }}</div>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isHistory }}" hint-placeholder-val="{{ false }}">
+          <div style="border:.5px solid rgba(var(--fg-rgb),.15);border-radius:13px;overflow:hidden">
+            <sc-for list="{{ history }}" as="h" hint-placeholder-count="6">
+              <div style="display:flex;align-items:center;gap:14px;padding:12px 14px;border-top: {{ h.sep }}">
+                <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:rgba(var(--fg-rgb),.4);width:112px">{{ h.time }}</span>
+                <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;padding:2px 7px;border-radius:5px;background:var(--panel);color:rgba(var(--fg-rgb),.65);width:74px;text-align:center">{{ h.cmd }}</span>
+                <span style="flex:1;min-width:0;font-size:12.5px;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ h.detail }}</span>
+                <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:var(--accent-text)">{{ h.size }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+      </div>
+
+      <sc-if value="{{ showBar }}" hint-placeholder-val="{{ true }}">
+        <div style="flex:none;height:54px;display:flex;align-items:center;gap:12px;padding:0 26px;border-top:1px solid rgba(var(--fg-rgb),.09);background:var(--hover)">
+          <div style="flex:1;min-width:0;font-size:12.5px;color:rgba(var(--fg-rgb),.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ barText }}</div>
+          <sc-if value="{{ canExecute }}" hint-placeholder-val="{{ false }}">
+            <div onClick="{{ askExecute }}" style="flex:none;height:32px;padding:0 18px;display:flex;align-items:center;border-radius:9px;background:var(--sel-bg);color:var(--sel-fg);font-size:12.5px;font-weight:600;cursor:pointer" style-hover="background:#33312c">{{ execLabel }}</div>
+          </sc-if>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <sc-if value="{{ updateOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;background:rgba(var(--fg-rgb),.38);display:flex;align-items:center;justify-content:center;padding:40px;z-index:25">
+      <div style="width:440px;background:var(--bg);border-radius:18px;padding:24px;box-shadow:0 24px 60px rgba(0,0,0,.3),0 0 0 .5px var(--glass-line);animation:moleRise .22s ease">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="flex:none;width:38px;height:38px;border-radius:11px;background:var(--sel-bg);display:flex;align-items:center;justify-content:center">
+            <img src="assets/mole.png" alt="Mole" style="display:block;width:24px;height:15px">
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:15px;font-weight:650;color:var(--fg)">{{ updTitle }}</div>
+            <div style="margin-top:3px;font-size:11.5px;color:rgba(var(--fg-rgb),.5)">{{ updMeta }}</div>
+          </div>
+        </div>
+
+        <sc-if value="{{ updHasNotes }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:16px;padding:13px 15px;border-radius:10px;background:rgba(var(--fg-rgb),.04);display:flex;flex-direction:column;gap:7px">
+            <sc-for list="{{ updNotes }}" as="n" hint-placeholder-count="3">
+              <div style="display:flex;gap:9px;font-size:12px;line-height:1.5;color:rgba(var(--fg-rgb),.68)">
+                <span style="flex:none;color:rgba(var(--fg-rgb),.35)">·</span>
+                <span style="flex:1;min-width:0;text-wrap:pretty">{{ n.text }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ updBusy }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:16px">
+            <div style="height:4px;border-radius:2px;background:rgba(var(--fg-rgb),.1);overflow:hidden">
+              <div style="height:100%;border-radius:2px;background:var(--sel-bg);transition:width .3s ease;width: {{ updProgressW }}"></div>
+            </div>
+            <div style="margin-top:8px;display:flex;justify-content:space-between;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;color:rgba(var(--fg-rgb),.6)">
+              <span>{{ updProgressText }}</span><span>{{ updProgressW }}</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <div style="margin-top:18px;display:flex;align-items:center;gap:10px">
+          <div onClick="{{ toggleAutoUpdate }}" style="flex:1;min-width:0;display:flex;align-items:center;gap:7px;font-size:11.5px;color:rgba(var(--fg-rgb),.55);cursor:pointer" style-hover="color:var(--fg)">
+            <span style="width:14px;height:14px;flex:none;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--sel-fg);background: {{ autoUpdBg }};border:1.5px solid {{ autoUpdBorder }}">{{ autoUpdMark }}</span>自动下载更新
+          </div>
+          <div onClick="{{ closeUpdate }}" style="flex:none;height:32px;padding:0 15px;display:flex;align-items:center;border-radius:8px;border:1px solid rgba(var(--fg-rgb),.13);font-size:12.5px;color:var(--fg);cursor:pointer" style-hover="background:var(--hover)">{{ updSecondary }}</div>
+          <sc-if value="{{ updHasPrimary }}" hint-placeholder-val="{{ true }}">
+            <div onClick="{{ updPrimary }}" style="flex:none;height:32px;padding:0 16px;display:flex;align-items:center;border-radius:8px;background:var(--sel-bg);color:var(--sel-fg);font-size:12.5px;font-weight:600;cursor:pointer" style-hover="opacity:.86">{{ updPrimaryLabel }}</div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ notifOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;top:34px;right:14px;width:344px;z-index:30;display:flex;flex-direction:column;gap:9px">
+      <sc-for list="{{ notifs }}" as="n" hint-placeholder-count="1">
+        <div style="display:flex;gap:11px;padding:13px 14px;border-radius:18px;background:var(--glass);backdrop-filter:blur(34px) saturate(180%);-webkit-backdrop-filter:blur(34px) saturate(180%);box-shadow:0 12px 34px rgba(0,0,0,.24),inset 0 .5px 0 var(--glass-hi),0 0 0 .5px var(--glass-line);animation:moleRise .22s ease">
+          <div style="flex:none;width:34px;height:34px;border-radius:10px;background:var(--sel-bg);display:flex;align-items:center;justify-content:center">
+            <img src="assets/mole.png" alt="Mole" style="display:block;width:22px;height:13.8px">
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:baseline;gap:8px">
+              <span style="flex:1;font-size:12.5px;font-weight:600;color:var(--fg)">{{ n.title }}</span>
+              <span style="font-size:10.5px;color:rgba(var(--fg-rgb),.4)">{{ n.time }}</span>
+            </div>
+            <div style="margin-top:3px;font-size:11.5px;line-height:1.55;color:rgba(var(--fg-rgb),.6);text-wrap:pretty">{{ n.body }}</div>
+            <sc-if value="{{ n.hasActions }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:9px;display:flex;gap:7px">
+                <div onClick="{{ n.primary }}" style="height:26px;padding:0 12px;display:flex;align-items:center;border-radius:7px;background:var(--sel-bg);color:var(--sel-fg);font-size:11.5px;font-weight:600;cursor:pointer" style-hover="opacity:.86">{{ n.primaryLabel }}</div>
+                <div onClick="{{ n.dismiss }}" style="height:26px;padding:0 12px;display:flex;align-items:center;border-radius:7px;border:1px solid rgba(var(--fg-rgb),.14);font-size:11.5px;color:rgba(var(--fg-rgb),.6);cursor:pointer" style-hover="background:var(--hover)">忽略</div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ onboarding }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;background:var(--bg);z-index:9;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:56px">
+      <div style="width:520px;display:flex;flex-direction:column;align-items:center;text-align:center">
+        <sc-if value="{{ obStep1 }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;align-items:center;animation:moleRise .3s ease">
+            <div style="width:88px;height:88px;border-radius:26px;background:var(--sel-bg);display:flex;align-items:center;justify-content:center">
+              <img src="assets/mole.png" alt="Mole" style="width:58px;height:36.5px">
+            </div>
+            <div style="margin-top:22px;font-size:23px;font-weight:650;color:var(--fg);letter-spacing:-.01em">帮你把 Mac 腾干净</div>
+            <div style="margin-top:8px;font-size:13px;line-height:1.7;color:rgba(var(--fg-rgb),.55);max-width:380px;text-wrap:pretty">Mole 会找出缓存、旧安装包、长期没打开的应用和它们留下的零碎文件。清掉的东西都进废纸篓，随时可以还原。</div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ obStep2 }}" hint-placeholder-val="{{ false }}">
+          <div style="width:100%;animation:moleRise .3s ease">
+            <div style="font-size:20px;font-weight:650;color:var(--fg)">需要两个权限</div>
+            <div style="margin-top:7px;font-size:12.5px;color:rgba(var(--fg-rgb),.55)">都只用于本机，Mole 不联网上传任何内容。</div>
+            <div style="margin-top:20px;display:flex;flex-direction:column;gap:10px;text-align:left">
+              <sc-for list="{{ obPerms }}" as="p" hint-placeholder-count="2">
+                <div style="display:flex;align-items:center;gap:14px;padding:15px 16px;border:1px solid rgba(var(--fg-rgb),.12);border-radius:12px">
+                  <div style="flex:1;min-width:0">
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <span style="font-size:13.5px;font-weight:600;color:var(--fg)">{{ p.label }}</span>
+                      <span style="font-size:10px;padding:1.5px 6px;border-radius:5px;background: {{ p.tagBg }};color: {{ p.tagFg }}">{{ p.tag }}</span>
+                    </div>
+                    <div style="margin-top:4px;font-size:11.5px;line-height:1.6;color:rgba(var(--fg-rgb),.5);text-wrap:pretty">{{ p.desc }}</div>
+                  </div>
+                  <div onClick="{{ p.act }}" style="flex:none;height:29px;padding:0 13px;display:flex;align-items:center;border-radius:8px;font-size:12px;font-weight:550;cursor:pointer;background: {{ p.btnBg }};color: {{ p.btnFg }};border:1px solid {{ p.btnBorder }}" style-hover="opacity:.85">{{ p.action }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ obStep3 }}" hint-placeholder-val="{{ false }}">
+          <div style="width:100%;animation:moleRise .3s ease">
+            <div style="font-size:20px;font-weight:650;color:var(--fg)">要不要定期自动清理？</div>
+            <div style="margin-top:7px;font-size:12.5px;color:rgba(var(--fg-rgb),.55)">只清理最安全的缓存类内容，其余仍然会问过你。</div>
+            <div style="margin-top:20px;display:flex;gap:10px">
+              <sc-for list="{{ obFreqs }}" as="f" hint-placeholder-count="3">
+                <div onClick="{{ f.go }}" style="flex:1;padding:16px 14px;border-radius:12px;cursor:pointer;text-align:left;border:1.5px solid {{ f.border }};background: {{ f.bg }}" style-hover="opacity:.9">
+                  <div style="font-size:13.5px;font-weight:600;color:var(--fg)">{{ f.label }}</div>
+                  <div style="margin-top:4px;font-size:11.5px;color:rgba(var(--fg-rgb),.5)">{{ f.desc }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div onClick="{{ toggleCharging }}" style="margin-top:12px;display:flex;align-items:center;gap:12px;padding:13px 16px;border:1px solid rgba(var(--fg-rgb),.12);border-radius:12px;cursor:pointer;text-align:left" style-hover="background:var(--hover)">
+              <div style="flex:1">
+                <div style="font-size:13px;font-weight:550;color:var(--fg)">只在接电源时执行</div>
+                <div style="margin-top:3px;font-size:11.5px;color:rgba(var(--fg-rgb),.5)">避免用电池时突然变卡</div>
+              </div>
+              <div style="flex:none;height:27px;padding:0 12px;display:flex;align-items:center;border-radius:7px;font-size:11.5px;font-weight:550;border:1px solid {{ chargingBorder }};background: {{ chargingBg }};color: {{ chargingFg }}">{{ chargingLabel }}</div>
+            </div>
+          </div>
+        </sc-if>
+
+        <div style="margin-top:30px;display:flex;align-items:center;gap:12px">
+          <div onClick="{{ obSkip }}" style="height:36px;padding:0 16px;display:flex;align-items:center;border-radius:9px;font-size:13px;color:rgba(var(--fg-rgb),.5);cursor:pointer" style-hover="color:var(--fg)">{{ obSkipLabel }}</div>
+          <div onClick="{{ obNext }}" style="height:36px;padding:0 24px;display:flex;align-items:center;border-radius:9px;background:var(--sel-bg);color:var(--sel-fg);font-size:13px;font-weight:600;cursor:pointer" style-hover="background:#33312c">{{ obNextLabel }}</div>
+        </div>
+        <div style="margin-top:22px;display:flex;gap:6px">
+          <sc-for list="{{ obDots }}" as="d" hint-placeholder-count="3">
+            <div style="width:6px;height:6px;border-radius:50%;background: {{ d.bg }}"></div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ confirmOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;background:rgba(var(--fg-rgb),.38);display:flex;align-items:center;justify-content:center;padding:40px">
+      <div style="width:470px;background:var(--bg);border-radius:18px;padding:24px;box-shadow:0 24px 60px rgba(0,0,0,.3),0 0 0 .5px var(--glass-line);animation:moleRise .22s ease">
+        <div style="font-size:15px;font-weight:650;color:var(--fg)">{{ confirmTitle }}</div>
+        <div style="margin-top:7px;font-size:12.5px;line-height:1.6;color:rgba(var(--fg-rgb),.6);text-wrap:pretty">{{ confirmBody }}</div>
+        <div style="margin-top:14px;max-height:132px;overflow-y:auto;border:1px solid rgba(var(--fg-rgb),.1);border-radius:9px">
+          <sc-for list="{{ confirmRows }}" as="c" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-top: {{ c.sep }}">
+              <span style="flex:1;min-width:0;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;color:rgba(var(--fg-rgb),.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.path }}</span>
+              <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;color:var(--fg)">{{ c.size }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end">
+          <div onClick="{{ cancelExecute }}" style="height:32px;padding:0 16px;display:flex;align-items:center;border-radius:8px;border:1px solid rgba(var(--fg-rgb),.13);font-size:12.5px;color:var(--fg);cursor:pointer" style-hover="background:var(--hover)">取消</div>
+          <div onClick="{{ runExecute }}" style="height:32px;padding:0 16px;display:flex;align-items:center;border-radius:8px;background:#a8412c;color:#fff;font-size:12.5px;font-weight:600;cursor:pointer" style-hover="background:#8f3524">确认执行</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1252,&quot;height&quot;:880},&quot;showSummaryBar&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;行为&quot;},&quot;requireConfirm&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;行为&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#4a5763&quot;,&quot;options&quot;:[&quot;#4a5763&quot;,&quot;#2f6bc4&quot;,&quot;#a8622f&quot;,&quot;#6a4f8f&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;外观&quot;}}">
+const V = {
+  status:   { title: '概览', sub: '这台 Mac 现在的状态 · 每 2 秒自动刷新' },
+  clean:    { title: '深度清理', sub: '缓存、日志、浏览器残留与已卸载应用的遗留文件' },
+  uninstall:{ title: '卸载应用', sub: '连同启动项、偏好设置与隐藏残留一起移除' },
+  purge:    { title: '项目产物', sub: 'node_modules / target / dist / venv 等构建产物' },
+  installer:{ title: '安装包清理', sub: 'Downloads、桌面、Homebrew 缓存、iCloud 中的安装包' },
+  optimize: { title: '系统优化', sub: '重建系统数据库、刷新服务与索引，不删除个人文件' },
+  analyze:  { title: '磁盘分析', sub: '看看空间都去哪了，删除的内容会移入废纸篓' },
+  history:  { title: '操作记录', sub: '每一次清理都有记录，可以查看和还原' },
+  updates: { title: '应用更新', sub: '检查这台 Mac 上的应用有没有新版本，可直接在 Mole 内更新' },
+  settings: { title: '设置', sub: '白名单、扫描范围、授权与更新' },
+};
+
+const LARGE = [
+  { name: 'dataset-2025.tar.gz', dir: false, gb: 14.8, pct: 100, tag: '下载', into: '' },
+  { name: 'Xcode DerivedData', dir: true, gb: 12.6, pct: 85, tag: '可清理', into: '' },
+  { name: 'Docker.raw', dir: false, gb: 9.4, pct: 63, tag: '虚拟磁盘', into: '' },
+  { name: 'backup_2023.zip', dir: false, gb: 8.2, pct: 55, tag: '归档', into: '' },
+  { name: 'WWDC-2025.mp4', dir: false, gb: 5.1, pct: 34, tag: '视频', into: '' },
+  { name: 'iOS 备份 · iPhone 16 Pro', dir: true, gb: 4.7, pct: 32, tag: '备份', into: '' },
+];
+
+const LIST_VIEWS = ['clean', 'uninstall', 'purge', 'installer', 'optimize'];
+
+const DATA = {
+  clean: [
+    { id: 'c1', name: '用户应用缓存', meta: '~/Library/Caches · 148 个目录', gb: 45.2, tag: '安全', risk: 0, on: true },
+    { id: 'c2', name: '浏览器缓存', meta: 'Chrome · Safari · Firefox · Arc', gb: 10.5, tag: '安全', risk: 0, on: true },
+    { id: 'c3', name: '开发工具缓存', meta: 'Xcode DerivedData · npm · pnpm · CoreSimulator', gb: 23.3, tag: '安全', risk: 0, on: true },
+    { id: 'c4', name: '系统日志与临时文件', meta: '/private/var/log · ~/Library/Logs', gb: 3.8, tag: '安全', risk: 0, on: true },
+    { id: 'c5', name: '应用专属缓存', meta: 'Spotify · Dropbox · Slack · Feishu', gb: 8.4, tag: '安全', risk: 0, on: true },
+    { id: 'c6', name: '已卸载应用残留', meta: '偏好设置 · 启动代理 · WebKit 存储 · 22 个应用', gb: 2.1, tag: '需确认', risk: 1, on: true },
+    { id: 'c7', name: '废纸篓', meta: '~/.Trash · 1,204 个项目', gb: 12.3, tag: '不可恢复', risk: 2, on: false },
+  ],
+  uninstall: [
+    { id: 'u1', name: 'Photoshop 2024', meta: '/Applications · 8 个月未打开 · 52 处关联文件', gb: 4.2, tag: '长期未用', risk: 1, on: true },
+    { id: 'u2', name: 'Premiere Pro', meta: '/Applications · 5 个月未打开 · 38 处关联文件', gb: 3.4, tag: '长期未用', risk: 1, on: true },
+    { id: 'u3', name: 'IntelliJ IDEA', meta: '/Applications · 3 天前使用 · 61 处关联文件', gb: 2.8, tag: '最近使用', risk: 2, on: false },
+    { id: 'u4', name: 'Docker Desktop', meta: '/Applications · 2 个月未打开 · 含虚拟磁盘镜像', gb: 1.9, tag: '需确认', risk: 1, on: false },
+    { id: 'u5', name: 'AppCode', meta: '/Applications · 已停止维护 · 24 处关联文件', gb: 1.4, tag: '长期未用', risk: 1, on: true },
+  ],
+  purge: [
+    { id: 'p1', name: 'my-react-app', meta: '~/Projects/my-react-app · node_modules', gb: 3.2, tag: 'node_modules', risk: 1, on: true },
+    { id: 'p2', name: 'rust-app', meta: '~/GitHub/rust-app · target', gb: 4.1, tag: 'target', risk: 1, on: true },
+    { id: 'p3', name: 'old-project', meta: '~/dev/old-project · node_modules', gb: 2.8, tag: 'node_modules', risk: 1, on: true },
+    { id: 'p4', name: 'next-blog', meta: '~/Projects/next-blog · .next + node_modules', gb: 1.9, tag: 'node_modules', risk: 1, on: true },
+    { id: 'p5', name: 'django-api', meta: '~/Work/django-api · venv', gb: 2.3, tag: 'venv', risk: 1, on: true },
+    { id: 'p6', name: 'current-work', meta: '~/Projects/current-work · 2 天前改动', gb: 0.83, tag: '最近改动', risk: 2, on: false },
+  ],
+  installer: [
+    { id: 'i1', name: 'Photoshop_2024.dmg', meta: '~/Downloads · 2025-11-04', gb: 1.2, tag: 'Downloads', risk: 0, on: true },
+    { id: 'i2', name: 'Illustrator_Setup.pkg', meta: '~/Downloads · 2025-09-18', gb: 0.9, tag: 'Downloads', risk: 0, on: true },
+    { id: 'i3', name: 'IntelliJ_IDEA.dmg', meta: '~/Downloads · 2026-01-22', gb: 0.83, tag: 'Downloads', risk: 0, on: true },
+    { id: 'i4', name: 'PyCharm_Pro.dmg', meta: '~/Library/Caches/Homebrew · 2025-12-30', gb: 0.63, tag: 'Homebrew', risk: 0, on: true },
+    { id: 'i5', name: 'Acrobat_Reader.dmg', meta: '~/Desktop · 2026-02-11', gb: 0.22, tag: 'Desktop', risk: 0, on: true },
+  ],
+  optimize: [
+    { id: 'o1', name: '重建系统数据库与缓存', meta: 'update_dyld_shared_cache · kextcache', gb: 0, tag: '安全', risk: 0, on: true },
+    { id: 'o2', name: '重置网络服务', meta: 'dscacheutil · mDNSResponder', gb: 0, tag: '安全', risk: 0, on: true },
+    { id: 'o3', name: '刷新 Finder 与 Dock', meta: 'killall Finder Dock', gb: 0, tag: '会重启界面', risk: 1, on: true },
+    { id: 'o4', name: '清理诊断与崩溃日志', meta: '~/Library/Logs/DiagnosticReports', gb: 1.3, tag: '安全', risk: 0, on: true },
+    { id: 'o5', name: '移除交换文件并重启 dynamic pager', meta: '/private/var/vm/swapfile*', gb: 4.0, tag: '需确认', risk: 1, on: false },
+    { id: 'o6', name: '重建 Spotlight 索引', meta: 'mdutil -E / · 重建期间搜索会变慢', gb: 0, tag: '耗时较长', risk: 1, on: false },
+  ],
+};
+
+const DISK = {
+  '~/Documents': [
+    { name: 'Library', dir: true, gb: 75.4, pct: 48.2, tag: '>6 个月', into: 'Library' },
+    { name: 'Downloads', dir: true, gb: 34.6, pct: 22.1, tag: '', into: 'Downloads' },
+    { name: 'Movies', dir: true, gb: 22.4, pct: 14.3, tag: '', into: '' },
+    { name: 'Documents', dir: true, gb: 16.9, pct: 10.8, tag: '', into: '' },
+    { name: 'backup_2023.zip', dir: false, gb: 8.2, pct: 5.2, tag: '大文件', into: '' },
+  ],
+  Library: [
+    { name: 'Developer', dir: true, gb: 38.2, pct: 50.7, tag: 'Xcode', into: '' },
+    { name: 'Caches', dir: true, gb: 18.9, pct: 25.1, tag: '可清理', into: '' },
+    { name: 'Containers', dir: true, gb: 9.6, pct: 12.7, tag: '', into: '' },
+    { name: 'Application Support', dir: true, gb: 6.4, pct: 8.5, tag: '', into: '' },
+    { name: 'Mail', dir: true, gb: 2.3, pct: 3.0, tag: '', into: '' },
+  ],
+  Downloads: [
+    { name: 'Photoshop_2024.dmg', dir: false, gb: 1.2, pct: 3.5, tag: '安装包', into: '' },
+    { name: 'dataset-2025.tar.gz', dir: false, gb: 14.8, pct: 42.8, tag: '大文件', into: '' },
+    { name: 'wwdc-sessions', dir: true, gb: 12.4, pct: 35.8, tag: '', into: '' },
+    { name: '收据与发票', dir: true, gb: 6.2, pct: 17.9, tag: '', into: '' },
+  ],
+};
+
+const HISTORY = [
+  { time: '08-15 09:42', cmd: '清理', detail: '清理 12,483 个缓存文件 · 6 个类别', size: '78.3 GB' },
+  { time: '08-14 21:10', cmd: '项目', detail: '清理 5 个项目的依赖与构建文件', size: '14.3 GB' },
+  { time: '08-12 14:05', cmd: '卸载', detail: 'Photoshop 2024 · 连同 52 处关联文件', size: '4.2 GB' },
+  { time: '08-11 10:31', cmd: '磁盘', detail: 'backup_2023.zip 移入废纸篓', size: '8.2 GB' },
+  { time: '08-09 19:58', cmd: '优化', detail: '重建启动服务与搜索索引', size: '—' },
+  { time: '08-07 08:14', cmd: '安装包', detail: '清理 5 个安装包 · 下载与更新缓存', size: '3.8 GB' },
+];
+
+const PROCS = [
+  ['Code Helper (Renderer)', 39.8, 37.0, '184 MB', 184], ['Chrome', 25.4, 29.3, '1.1 GB', 1126],
+  ['kernel_task', 17.9, 11.2, '267 MB', 267], ['Figma', 9.1, 7.9, '1.2 GB', 1229],
+  ['Terminal', 7.2, null, '140 MB', 140], ['Docker Desktop', 6.5, null, '224 MB', 224],
+  ['Slack', 6.2, null, '115 MB', 115], ['Spotlight', 6.2, null, '421 MB', 421],
+  ['WindowServer', 5.8, 6.7, '19 MB', 19], ['Music', 3.1, null, '86 MB', 86],
+  ['Safari', 2.9, 4.2, '612 MB', 612], ['Feishu', 2.6, null, '486 MB', 486],
+  ['Dropbox', 2.4, 3.1, '198 MB', 198], ['mds_stores', 2.1, null, '92 MB', 92],
+  ['Notion', 1.9, null, '341 MB', 341], ['Xcode', 1.7, 5.4, '2.3 GB', 2355],
+  ['1Password', 1.4, null, '124 MB', 124], ['Finder', 1.2, null, '78 MB', 78],
+  ['Raycast', 0.9, null, '96 MB', 96], ['bluetoothd', 0.7, null, '32 MB', 32],
+  ['Photos', 0.6, null, '154 MB', 154], ['coreaudiod', 0.4, null, '21 MB', 21],
+];
+
+const APPS = [
+  { id: 'a1', name: 'Mac Mouse Fix', source: 'Sparkle', from: '2.2.5', to: '3.0.8', bg: '#2f6f8f' },
+  { id: 'a2', name: 'Netcatty', source: 'Electron', from: '1.1.75', to: '1.1.80', bg: '#3f5f8f' },
+  { id: 'a3', name: 'LaunchOS', source: 'Homebrew', from: '2.2.0', to: '2.2.1', bg: '#4a4a48' },
+  { id: 'a4', name: 'LinearMouse', source: 'Homebrew', from: '0.11.2', to: '0.11.4', bg: '#5a7fb5' },
+];
+
+const APPS_CURRENT = [
+  { id: 'c1', name: 'Minesweeper', source: 'App Store', meta: '2.1.2 · 17.8 MB · 2 年前活跃', bg: '#6a4f8f' },
+  { id: 'c2', name: 'Figma', source: 'Electron', meta: '124.8.0 · 1.2 GB · 3 天前活跃', bg: '#a8412c' },
+  { id: 'c3', name: 'Raycast', source: 'Sparkle', meta: '1.86.0 · 96 MB · 今天活跃', bg: '#c0392b' },
+  { id: 'c4', name: 'IINA', source: 'Homebrew', meta: '1.3.5 · 142 MB · 上周活跃', bg: '#8a6a2f' },
+];
+
+const NOTIFS = {
+  space: [{ title: '磁盘快满了', body: '可用空间只剩 18.4 GB。Mole 找到 105.6 GB 可以清理的内容。', time: '现在', primaryLabel: '去清理', to: 'clean' }],
+  done: [{ title: '清理完成', body: '已释放 78.3 GB，内容都在废纸篓里，30 天内可以还原。', time: '现在', primaryLabel: '查看记录', to: 'history' }],
+  auto: [{ title: '已完成每周自动清理', body: '清理了 6 个类别的缓存，释放 42.1 GB。这次没有动你的文件。', time: '2 分钟前', primaryLabel: '查看记录', to: 'history' }],
+  update: [{ title: 'Mole 1.1 可以更新了', body: '磁盘分析更快了，清理前还能单独排除某个应用的缓存。', time: '现在', primaryLabel: '查看更新' }],
+  battery: [{ title: 'Magic Mouse 电量偏低', body: '当前 18%，建议尽快充电。', time: '5 分钟前' }],
+};
+
+const fmt = (gb) => gb === 0 ? '—' : (gb < 1 ? Math.round(gb * 1024) + ' MB' : gb.toFixed(1) + ' GB');
+
+const ICONS = {
+  status: 'M4 15.5a8 8 0 1 1 16 0 M12 15.5l4.4-4.6',
+  clean: 'M5 7.2h14 M10 7.2V4.6h4v2.6 M6.6 7.2l.9 12.2h9L17.4 7.2 M10.4 10.6v5.8 M13.6 10.6v5.8',
+  uninstall: 'M4.6 5.4h5.6v5.6H4.6z M13.8 5.4h5.6v5.6h-5.6z M4.6 14.4h5.6V20H4.6z M14 17.2h5.4',
+  purge: 'M3.6 8a2 2 0 0 1 2-2h3.2l1.9 2.3h5.7a2 2 0 0 1 2 2v7.4a2 2 0 0 1-2 2H5.6a2 2 0 0 1-2-2z M9.6 15l-1.4-1.6L9.6 12 M14.4 12l1.4 1.4-1.4 1.6',
+  installer: 'M12 3.8v8.8 M8.6 9.6 12 12.9l3.4-3.3 M4.6 15.8v2.6a2 2 0 0 0 2 2h10.8a2 2 0 0 0 2-2v-2.6',
+  optimize: 'M4 8.2h9.6 M17.4 8.2H20 M4 15.8h4.6 M12.4 15.8H20 M15.5 6.6a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 1 1 0-3.2 M10.5 14.2a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 1 1 0-3.2',
+  updates: 'M12 20.4a8.4 8.4 0 1 1 0-16.8 8.4 8.4 0 0 1 0 16.8 M12 7.6v8.6 M8.8 13l3.2 3.2 3.2-3.2',
+  analyze: 'M12 3.6a8.4 8.4 0 1 0 8.4 8.4H12z M12 3.6a8.4 8.4 0 0 1 8.4 8.4',
+  folder: 'M3.6 8a2 2 0 0 1 2-2h3.2l1.9 2.3h5.7a2 2 0 0 1 2 2v7.4a2 2 0 0 1-2 2H5.6a2 2 0 0 1-2-2z',
+  doc: 'M6.4 3.8h7L18.4 9v11.2H6.4z M13.2 3.8V9h5.2',
+  sun: 'M12 7.8a4.2 4.2 0 1 1 0 8.4 4.2 4.2 0 1 1 0-8.4 M12 2.8v2.2 M12 19v2.2 M4.6 12H2.4 M21.6 12h-2.2 M6.8 6.8 5.2 5.2 M18.8 18.8l-1.6-1.6 M6.8 17.2l-1.6 1.6 M18.8 5.2l-1.6 1.6',
+  moon: 'M20 14.6A8.6 8.6 0 0 1 9.4 4a8.4 8.4 0 1 0 10.6 10.6z',
+  gear: 'M13.7 2.9h-3.4l-.4 2.2c-.6.2-1.1.4-1.6.8L6.4 4.8 4 7.2l1.1 1.9c-.3.5-.6 1-.7 1.6l-2.2.4v3.4l2.2.4c.2.6.4 1.1.7 1.6L4 18.4l2.4 2.4 1.9-1.1c.5.3 1 .6 1.6.7l.4 2.2h3.4l.4-2.2c.6-.2 1.1-.4 1.6-.7l1.9 1.1 2.4-2.4-1.1-1.9c.3-.5.6-1 .7-1.6l2.2-.4v-3.4l-2.2-.4c-.2-.6-.4-1.1-.7-1.6L20 7.2l-2.4-2.4-1.9 1.1c-.5-.4-1-.6-1.6-.8z M12 9.2a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 1 1 0-5.6',
+  history: 'M20.4 12a8.4 8.4 0 1 1-2.6-6.1 M20.4 4.2v4.2h-4.2 M12 8.2v4.4l3.4 2',
+};
+
+class Component extends DCLogic {
+  state = {
+    view: 'status',
+    phase: {},
+    sel: {},
+    progress: 0,
+    scanLine: '',
+    log: [],
+    confirmOpen: false,
+    hud: false,
+    stepIdx: 0,
+    drawer: false,
+    copied: false,
+    dir: '~/Documents',
+    analyzeMode: 'tree',
+    cfg: { external: false, log: true, touchid: true, launchers: false, nightly: false, trash: true, hudAlways: true, notify: true, auto: '每周', charging: true, fullDisk: false },
+    onboard: 0,
+    demo: '',
+    failDetail: false,
+    themeMode: 'auto',
+    sysDark: typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches,
+    notif: null,
+    upd: '',
+    updProgress: 0,
+    autoUpd: true,
+    appProg: {},
+    appDone: [],
+    appIgnored: [],
+    sortBy: 'cpu',
+    killed: [],
+    tick: 0,
+    cpu: 45.2,
+    mem: 58.4,
+    net: [0.5, 0.3, 0.8, 0.4, 0.2, 0.6, 0.9, 0.5, 0.3, 0.4, 0.7, 0.2, 0.5, 0.8, 0.4, 0.3, 0.6, 0.5, 0.2, 0.7, 0.4, 0.9, 0.3, 0.5],
+    down: 0.54,
+    up: 0.02,
+    termLog: [
+      '$ mo status --json | jq .health_score',
+      '92',
+      '$ mo clean --dry-run',
+      'Scanning cache directories...',
+      '  ✓ 7 categories · 105.6GB reclaimable',
+      'Dry run — nothing was deleted.',
+    ],
+    freed: 0,
+  };
+
+  timers = [];
+
+  componentDidMount() {
+    if (typeof matchMedia === 'function') {
+      this.mq = matchMedia('(prefers-color-scheme: dark)');
+      this.onScheme = (e) => this.setState({ sysDark: e.matches });
+      this.mq.addEventListener('change', this.onScheme);
+    }
+    this.iv = setInterval(() => {
+      if (this.state.view !== 'status') return;
+      const jitter = (v, lo, hi) => Math.min(hi, Math.max(lo, v + (Math.random() - 0.5) * 8));
+      const net = this.state.net.slice(1).concat([Math.random() * 0.9 + 0.1]);
+      this.setState({ cpu: jitter(this.state.cpu, 12, 82), mem: jitter(this.state.mem, 48, 71), net, down: +(Math.random() * 2.4).toFixed(2), up: +(Math.random() * 0.4).toFixed(2), tick: this.state.tick + 1 });
+    }, 2000);
+  }
+  componentWillUnmount() { clearInterval(this.iv); this.timers.forEach(clearTimeout); }
+
+  rowsFor(view) { return DATA[view] || []; }
+  phaseFor(view) { return this.state.phase[view] || (LIST_VIEWS.indexOf(view) >= 0 ? 'idle' : 'none'); }
+  selFor(view) {
+    if (this.state.sel[view]) return this.state.sel[view];
+    const s = {};
+    this.rowsFor(view).forEach(r => { s[r.id] = r.on; });
+    return s;
+  }
+  setPhase(view, phase, extra) { this.setState(Object.assign({ phase: Object.assign({}, this.state.phase, { [view]: phase }) }, extra || {})); }
+
+  go(view) { this.setState({ view, confirmOpen: false, copied: false }); }
+
+  startScan = () => {
+    const view = this.state.view;
+    const lines = ['Scanning ' + view + ' targets...', 'Reading ~/Library ...', 'Checking protected paths ...', 'Sizing candidates ...'];
+    this.setPhase(view, 'scanning', { progress: 0, scanLine: lines[0] });
+    this.timers.forEach(clearTimeout); this.timers = [];
+    [1, 2, 3].forEach((i) => {
+      this.timers.push(setTimeout(() => this.setState({ progress: i * 27, scanLine: lines[i] }), i * 320));
+    });
+    this.timers.push(setTimeout(() => {
+      this.setState({ progress: 100 });
+      this.setPhase(view, 'ready');
+    }, 1320));
+  };
+
+  toggle(view, id) {
+    const s = Object.assign({}, this.selFor(view));
+    s[id] = !s[id];
+    this.setState({ sel: Object.assign({}, this.state.sel, { [view]: s }) });
+  }
+
+  toggleAll = () => {
+    const view = this.state.view;
+    const cur = this.selFor(view);
+    const anyOff = this.rowsFor(view).some(r => !cur[r.id]);
+    const s = {};
+    this.rowsFor(view).forEach(r => { s[r.id] = anyOff; });
+    this.setState({ sel: Object.assign({}, this.state.sel, { [view]: s }) });
+  };
+
+  askExecute = () => {
+    if (this.props.requireConfirm === false) return this.runExecute();
+    this.setState({ confirmOpen: true });
+  };
+  cancelExecute = () => this.setState({ confirmOpen: false });
+
+  runExecute = () => {
+    const view = this.state.view;
+    const sel = this.selFor(view);
+    const picked = this.rowsFor(view).filter(r => sel[r.id]);
+    const freed = picked.reduce((a, r) => a + r.gb, 0);
+    const n = Math.min(picked.length, 6);
+    this.setPhase(view, 'running', { confirmOpen: false, progress: 6, stepIdx: 0, freed });
+    this.timers.forEach(clearTimeout); this.timers = [];
+    for (let i = 0; i < n; i++) {
+      this.timers.push(setTimeout(() => this.setState({ stepIdx: i + 1, progress: Math.round((i + 1) / n * 92) + 6 }), 420 * (i + 1)));
+    }
+    this.timers.push(setTimeout(() => {
+      this.setState({ progress: 100, notif: 'done' });
+      this.setPhase(view, 'done');
+    }, 420 * n + 520));
+  };
+
+  updateApp = (id) => {
+    this.setState({ appProg: Object.assign({}, this.state.appProg, { [id]: 8 }) });
+    [1, 2, 3].forEach(i => this.timers.push(setTimeout(() => {
+      this.setState({ appProg: Object.assign({}, this.state.appProg, { [id]: i * 30 }) });
+    }, i * 380)));
+    this.timers.push(setTimeout(() => {
+      const p = Object.assign({}, this.state.appProg); delete p[id];
+      this.setState({ appProg: p, appDone: this.state.appDone.concat([id]) });
+    }, 1500));
+  };
+
+  updateAllApps = () => {
+    APPS.filter(a => this.state.appDone.indexOf(a.id) < 0 && this.state.appIgnored.indexOf(a.id) < 0)
+      .forEach((a, i) => this.timers.push(setTimeout(() => this.updateApp(a.id), i * 220)));
+  };
+
+  checkUpdate = () => {
+    this.setState({ upd: 'checking', updProgress: 0 });
+    this.timers.push(setTimeout(() => this.setState({ upd: 'available' }), 1100));
+  };
+
+  downloadUpdate = () => {
+    this.setState({ upd: 'downloading', updProgress: 4 });
+    [1, 2, 3, 4].forEach(i => this.timers.push(setTimeout(() => this.setState({ updProgress: i * 23 }), i * 420)));
+    this.timers.push(setTimeout(() => this.setState({ upd: 'ready', updProgress: 100 }), 2000));
+  };
+
+  undo = () => {
+    this.timers.forEach(clearTimeout); this.timers = [];
+    this.setPhase(this.state.view, 'ready', { freed: 0, stepIdx: 0, progress: 0 });
+  };
+
+  cmdString() {
+    const v = this.state.view, ph = this.phaseFor(v);
+    if (v === 'status') return 'mo status --json';
+    if (v === 'analyze') return 'mo analyze ' + this.state.dir + ' --json';
+    if (v === 'history') return 'mo history --json';
+    if (ph === 'running' || ph === 'done') return 'mo ' + v;
+    return 'mo ' + v + ' --dry-run';
+  }
+
+  renderVals() {
+    const st = this.state, view = st.view, ph = this.phaseFor(view);
+    const accent = this.props.accent || 'var(--sel-bg)';
+    const accentText = this.props.accent || 'var(--accent-text)';
+    const theme = st.themeMode === 'auto' ? (st.sysDark ? 'dark' : 'light') : st.themeMode;
+    const themeLabel = st.themeMode === 'auto' ? '跟随系统' : st.themeMode === 'dark' ? '深色' : '浅色';
+    const sel = this.selFor(view);
+    const rowsRaw = this.rowsFor(view);
+    const max = Math.max.apply(null, rowsRaw.map(r => r.gb).concat([1]));
+    const picked = rowsRaw.filter(r => sel[r.id]);
+    const selGb = picked.reduce((a, r) => a + r.gb, 0);
+    const totalGb = rowsRaw.reduce((a, r) => a + r.gb, 0);
+    const tagStyle = (risk) => risk === 2
+      ? { bg: 'rgba(168,65,44,.1)', fg: '#a8412c' }
+      : risk === 1 ? { bg: 'rgba(var(--fg-rgb),.07)', fg: 'rgba(var(--fg-rgb),.6)' } : { bg: 'var(--accent-soft)', fg: accentText };
+
+    const navItem = (id, label, icon, badge) => {
+      const on = view === id;
+      return {
+        id, label, icon, badge: badge || '',
+        badgeFg: on ? 'rgba(255,255,255,.72)' : 'rgba(var(--fg-rgb),.6)',
+        bg: on ? 'var(--sel-bg)' : 'transparent',
+        fg: on ? 'var(--sel-fg)' : 'rgba(var(--fg-rgb),.78)',
+        fw: on ? '600' : '450',
+        go: () => this.go(id),
+      };
+    };
+
+    const anyOff = rowsRaw.some(r => !sel[r.id]);
+    const diskSrc = st.analyzeMode === 'large' ? LARGE : (DISK[st.dir] || []);
+    const diskRows = diskSrc.map((d, i) => {
+      const t = d.tag ? tagStyle(d.name === 'Caches' ? 0 : 1) : { bg: 'transparent', fg: 'transparent' };
+      return {
+        idx: (i + 1) + '.', icon: d.dir ? ICONS.folder : ICONS.doc, name: d.name, size: fmt(d.gb),
+        pct: d.pct.toFixed(1) + '%', barW: d.pct + '%', tag: d.tag, tagBg: t.bg, tagFg: t.fg,
+        sep: i === 0 ? 'none' : '1px solid rgba(var(--fg-rgb),.08)',
+        open: () => { if (d.into && DISK[d.into]) this.setState({ dir: d.into }); },
+      };
+    });
+    const crumbs = st.dir === '~/Documents'
+      ? [{ label: '~/Documents', fg: 'var(--fg)', go: () => {} }]
+      : [{ label: '~/Documents', fg: 'rgba(var(--fg-rgb),.5)', go: () => this.setState({ dir: '~/Documents' }) }, { label: '/ ' + st.dir, fg: 'var(--fg)', go: () => {} }];
+
+    const tab = (id, label) => ({
+      label, go: () => this.setState({ analyzeMode: id }),
+      bg: st.analyzeMode === id ? 'var(--sel-bg)' : 'rgba(var(--fg-rgb),.05)',
+      fg: st.analyzeMode === id ? 'var(--sel-fg)' : 'rgba(var(--fg-rgb),.6)',
+    });
+    const cfg = st.cfg;
+    const flip = (k) => () => this.setState({ cfg: Object.assign({}, cfg, { [k]: !cfg[k] }) });
+    const sw = (on) => on
+      ? { action: '已开启', btnBg: 'var(--sel-bg)', btnFg: 'var(--sel-fg)', btnBorder: 'var(--sel-bg)' }
+      : { action: '已关闭', btnBg: 'transparent', btnFg: 'rgba(var(--fg-rgb),.55)', btnBorder: 'rgba(var(--fg-rgb),.16)' };
+    const btn = (label, danger) => ({
+      action: label, btnBg: 'transparent',
+      btnFg: danger ? '#a8412c' : 'rgba(var(--fg-rgb),.7)',
+      btnBorder: danger ? 'rgba(168,65,44,.3)' : 'rgba(var(--fg-rgb),.16)',
+    });
+    const item = (label, desc, ctrl, act, danger) => Object.assign({ label, desc, act: act || (() => {}), fg: danger ? '#a8412c' : 'var(--fg)' }, ctrl);
+    const groupize = (title, items) => ({ title, items: items.map((it, i) => Object.assign(it, { sep: i === 0 ? 'none' : '1px solid rgba(var(--fg-rgb),.08)' })) });
+
+    const settingGroups = [
+      groupize('清理偏好', [
+        item('清理白名单', '8 个受保护的目录，永远不会被清理', btn('管理')),
+        item('优化白名单', '3 条规则 · 例如常驻挂载的磁盘映像', btn('管理')),
+        item('项目扫描路径', '~/Projects、~/GitHub、~/dev', btn('编辑')),
+        item('自动清理', cfg.auto === '关闭' ? '关闭 · 只在手动点击时清理' : cfg.auto + '自动清理最安全的缓存' + (cfg.charging ? '，仅在接电源时' : ''), btn(cfg.auto),
+          () => this.setState({ cfg: Object.assign({}, cfg, { auto: cfg.auto === '每周' ? '每月' : cfg.auto === '每月' ? '关闭' : '每周' }) })),
+        item('删除方式', cfg.trash ? '移入废纸篓，30 天内可还原' : '直接删除，不可恢复', Object.assign(sw(cfg.trash), { action: cfg.trash ? '移入废纸篓' : '直接删除' }), flip('trash')),
+      ]),
+      groupize('磁盘分析', [
+        item('包含外置磁盘', '扫描 /Volumes 下挂载的硬盘，启动会变慢', sw(cfg.external), flip('external')),
+        item('大文件阈值', '只显示超过 500 MB 的文件', btn('500 MB')),
+      ]),
+      groupize('系统与权限', [
+        item('Touch ID 授权', '需要管理员权限时用指纹代替输入密码', sw(cfg.touchid), flip('touchid')),
+        item('记录操作日志', '每次删除都会写入记录，可在操作记录中查看', sw(cfg.log), flip('log')),
+        item('快捷启动器', '在 Raycast / Alfred 中直接调用清理、优化', cfg.launchers ? sw(true) : btn('安装'), flip('launchers')),
+        item('菜单栏常驻', '在菜单栏显示可用空间与健康分', sw(cfg.hudAlways), flip('hudAlways')),
+        item('通知提醒', cfg.notify ? '磁盘不足、自动清理完成、配件低电量时提醒' : '不发送任何通知', sw(cfg.notify !== false), flip('notify')),
+        item('外观', st.themeMode === 'auto' ? '跟随系统 · 当前' + (theme === 'dark' ? '深色' : '浅色') : '始终使用' + themeLabel, btn(themeLabel),
+          () => this.setState({ themeMode: st.themeMode === 'auto' ? 'light' : st.themeMode === 'light' ? 'dark' : 'auto' })),
+      ]),
+      groupize('原型演示', [
+        item('首次启动引导', '欢迎、权限申请、自动清理设置三步', btn('播放'), () => this.setState({ onboard: 1 })),
+        item('权限不足', '在清理页显示未获得完全磁盘访问权限的状态', btn('查看'), () => { this.setState({ demo: 'denied' }); this.go('clean'); }),
+        item('扫描失败', '部分目录被占用、扫描未完成', btn('查看'), () => { this.setState({ demo: 'fail' }); this.go('clean'); }),
+        item('无可清理内容', '空态 · 已经很干净', btn('查看'), () => { this.setState({ demo: 'empty' }); this.go('clean'); }),
+        item('通知 · 磁盘快满了', '提示可清理空间，可直接跳转', btn('查看'), () => this.setState({ notif: 'space' })),
+        item('通知 · 自动清理完成', '每周自动清理后的汇报', btn('查看'), () => this.setState({ notif: 'auto' })),
+        item('通知 · 配件电量偏低', '无操作按钮的纯提醒', btn('查看'), () => this.setState({ notif: 'battery' })),
+        item('通知 · 有新版本', '点通知直接打开更新面板', btn('查看'), () => this.setState({ notif: 'update' })),
+        item('更新流程', '检查 → 下载 → 重启就绪四个状态', btn('播放'), this.checkUpdate),
+      ]),
+      groupize('关于', [
+        item('Mole 1.0.0', '有新版本 1.1.0 可以更新 · 12.4 MB', Object.assign(btn('查看更新'), { btnBg: 'var(--sel-bg)', btnFg: 'var(--sel-fg)', btnBorder: 'var(--sel-bg)' }), () => this.setState({ upd: 'available' })),
+        item('自动检查更新', st.autoUpd ? '每天检查一次，在 Wi-Fi 下自动下载' : '只在我手动检查时更新', sw(st.autoUpd), () => this.setState({ autoUpd: !st.autoUpd })),
+        item('清理引擎 v1.41.0', '已是最新版本 · 上次检查 2 小时前', btn('检查更新'), this.checkUpdate),
+        item('测试版更新通道', '抢先体验尚未发布的新功能，可能不稳定', sw(cfg.nightly), flip('nightly')),
+        item('从这台 Mac 移除 Mole', '会保留操作记录文件', btn('移除', true), null, true),
+      ]),
+    ];
+
+    const pendingApps = APPS.filter(a => st.appDone.indexOf(a.id) < 0 && st.appIgnored.indexOf(a.id) < 0 && st.appProg[a.id] === undefined);
+    const demoOn = !!st.demo && LIST_VIEWS.indexOf(view) >= 0;
+    const ob = st.onboard;
+    const obDot = (n) => ({ bg: ob === n ? 'var(--sel-bg)' : 'rgba(var(--fg-rgb),.18)' });
+    const permBtn = (on) => on
+      ? { action: '已授权', btnBg: 'var(--accent-soft)', btnFg: accentText, btnBorder: 'transparent' }
+      : { action: '去开启', btnBg: 'var(--sel-bg)', btnFg: 'var(--sel-fg)', btnBorder: 'var(--sel-bg)' };
+    const freq = (label, desc) => ({
+      label, desc, go: () => this.setState({ cfg: Object.assign({}, cfg, { auto: label }) }),
+      border: cfg.auto === label ? 'var(--sel-bg)' : 'rgba(var(--fg-rgb),.12)',
+      bg: cfg.auto === label ? 'rgba(var(--fg-rgb),.04)' : 'transparent',
+    });
+
+    const idleCopy = {
+      clean: [ICONS.clean, '先看看，再决定', '检查只是读取，不会动任何文件。结果按类别列出，你勾选之后才会开始清理。'],
+      uninstall: [ICONS.uninstall, '检查已安装的应用', '列出每个应用占了多少空间、多久没打开，卸载时连同它留下的零碎文件一起清掉。'],
+      purge: [ICONS.purge, '找出旧项目的临时文件', '开发项目里的依赖和构建产物通常很占地方，随时可以重新生成；最近改动过的项目默认不选。'],
+      installer: [ICONS.installer, '找出用不到的安装包', '下载文件夹、桌面和更新缓存里的安装包，装完之后就没用了。'],
+      optimize: [ICONS.optimize, '做一次系统保养', '重建系统缓存与索引、刷新服务，不会碰你的个人文件。'],
+    }[view] || [ICONS.clean, '', ''];
+
+    return {
+      hostLabel: 'MacBook-Pro · macOS 15.4',
+      navMain: [navItem('status', '概览', ICONS.status)],
+      navAct: [
+        navItem('clean', '深度清理', ICONS.clean, '105.6G'),
+        navItem('uninstall', '卸载应用', ICONS.uninstall, '13.7G'),
+        navItem('purge', '项目产物', ICONS.purge, '15.1G'),
+        navItem('installer', '安装包', ICONS.installer, '3.8G'),
+        navItem('optimize', '系统优化', ICONS.optimize, ''),
+      ],
+      navIns: [navItem('updates', '应用更新', ICONS.updates, pendingApps.length ? String(pendingApps.length) : ''), navItem('analyze', '磁盘分析', ICONS.analyze), navItem('history', '操作记录', ICONS.history)],
+
+      isUpdates: view === 'updates',
+      updGroups: [
+        {
+          title: '可在 Mole 内更新', count: pendingApps.length + ' 个',
+          hasAll: pendingApps.length > 0, updateAll: this.updateAllApps,
+          apps: APPS.map((a, i) => {
+            const busy = st.appProg[a.id] !== undefined, done = st.appDone.indexOf(a.id) >= 0, ign = st.appIgnored.indexOf(a.id) >= 0;
+            return {
+              name: a.name, source: a.source, initial: a.name.charAt(0), iconBg: a.bg,
+              from: a.from + ' → ', to: a.to, toFg: done ? 'rgba(var(--fg-rgb),.6)' : accentText,
+              sep: i === 0 ? 'none' : '1px solid rgba(var(--fg-rgb),.08)',
+              pending: !busy && !done && !ign, busy: busy,
+              progressW: (st.appProg[a.id] || 0) + '%',
+              settled: done || ign, settledText: done ? '已更新' : '已忽略',
+              settledFg: done ? accentText : 'rgba(var(--fg-rgb),.4)',
+              update: () => this.updateApp(a.id),
+              ignore: () => this.setState({ appIgnored: st.appIgnored.concat([a.id]) }),
+            };
+          }),
+        },
+        {
+          title: '已是最新的软件', count: '52 个', hasAll: false, updateAll: () => {},
+          apps: APPS_CURRENT.map((a, i) => ({
+            name: a.name, source: a.source, initial: a.name.charAt(0), iconBg: a.bg,
+            from: a.meta, to: '', toFg: 'transparent',
+            sep: i === 0 ? 'none' : '1px solid rgba(var(--fg-rgb),.08)',
+            pending: false, busy: false, progressW: '0%',
+            settled: false, settledText: '', settledFg: 'transparent',
+            update: () => {}, ignore: () => {},
+          })),
+        },
+      ],
+
+      pageTitle: V[view].title,
+      pageSub: V[view].sub,
+      showScanBtn: LIST_VIEWS.indexOf(view) >= 0 && ph === 'ready',
+      scanBtnLabel: '重新扫描',
+      startScan: this.startScan,
+
+      isIdle: ph === 'idle' && !demoOn,
+      isScanning: ph === 'scanning' && !demoOn,
+      isReady: ph === 'ready' && !demoOn,
+      isRunning: ph === 'running' && !demoOn,
+      isDone: ph === 'done' && !demoOn,
+      isDenied: demoOn && st.demo === 'denied',
+      isFail: demoOn && st.demo === 'fail',
+      isEmpty: demoOn && st.demo === 'empty',
+      failDetail: st.failDetail,
+      showFailDetail: () => this.setState({ failDetail: !st.failDetail }),
+      retryScan: () => { this.setState({ demo: '', failDetail: false }); this.startScan(); },
+      clearDemo: () => this.setState({ demo: '', failDetail: false }),
+      isStatus: view === 'status',
+      isAnalyze: view === 'analyze',
+      isHistory: view === 'history',
+
+      idleIcon: idleCopy[0], idleTitle: idleCopy[1], idleBody: idleCopy[2],
+      scanLine: st.scanLine, progressW: st.progress + '%',
+
+      toggleAll: this.toggleAll,
+      toggleAllLabel: anyOff ? '全选' : '全不选',
+      readyMeta: '共 ' + rowsRaw.length + ' 项 · 已选 ' + picked.length + ' 项 · 总计 ' + fmt(totalGb),
+      selSize: fmt(selGb),
+      rows: rowsRaw.map((r, i) => {
+        const on = !!sel[r.id], t = tagStyle(r.risk);
+        return {
+          name: r.name, meta: r.meta, size: fmt(r.gb), tag: r.tag, tagBg: t.bg, tagFg: t.fg,
+          mark: on ? '✓' : '', boxBg: on ? 'var(--sel-bg)' : 'transparent',
+          boxBorder: on ? 'var(--sel-bg)' : 'rgba(var(--fg-rgb),.25)',
+          rowBg: on ? 'var(--bg)' : 'rgba(var(--fg-rgb),.015)',
+          barW: (r.gb / max * 100) + '%',
+          barFill: on ? (r.risk === 2 ? '#a8412c' : accent) : 'rgba(var(--fg-rgb),.18)',
+          sep: i === 0 ? 'none' : '1px solid rgba(var(--fg-rgb),.08)',
+          toggle: () => this.toggle(view, r.id),
+        };
+      }),
+
+      runTitle: view === 'optimize' ? '正在优化系统…' : '正在整理…',
+      steps: picked.slice(0, 6).map((r, i) => ({
+        label: r.name, size: fmt(r.gb),
+        mark: i < st.stepIdx ? '✓' : (i === st.stepIdx ? '●' : '○'),
+        fg: i < st.stepIdx ? accentText : (i === st.stepIdx ? 'var(--fg)' : 'rgba(var(--fg-rgb),.35)'),
+      })),
+      doneSize: fmt(st.freed),
+      doneText: view === 'optimize' ? '系统优化完成 · 已刷新服务与索引' : '已移入废纸篓 · 30 天内可以还原，当前可用 223.5 GB',
+      goHistory: () => this.go('history'),
+      undo: this.undo,
+
+      health: 92, healthW: '92%',
+      meters: [
+        { label: 'CPU', value: st.cpu.toFixed(1) + '%', w: st.cpu + '%', fill: 'rgba(var(--fg-rgb),.7)', sub: 'Load 0.82 / 1.05 / 1.23 · 8 核' },
+        { label: 'GPU', value: (st.cpu * 0.6 + 8).toFixed(1) + '%', w: (st.cpu * 0.6 + 8) + '%', fill: 'rgba(var(--fg-rgb),.7)', sub: '20 核 · 显存 6.4 / 32 GB' },
+        { label: '内存', value: st.mem.toFixed(1) + '%', w: st.mem + '%', fill: 'rgba(var(--fg-rgb),.7)', sub: '14.2 / 24.0 GB · 可用 9.8 GB' },
+        { label: '磁盘', value: '67.2%', w: '67.2%', fill: 'rgba(var(--fg-rgb),.7)', sub: '可用 156.3 GB · 读 2.1 / 写 18.3 MB/s' },
+      ],
+      powerDevices: [
+        { name: 'MacBook Pro', d: 'M3.6 4.8h8.8v5H3.6zM2.2 11.4h11.6', value: '100%', off: '0', fill: accent },
+        { name: 'AirPods Pro', d: 'M5.6 5.4a1.7 1.7 0 1 1 0 3.3M5.6 8.7v3.6M10.4 5.4a1.7 1.7 0 1 0 0 3.3M10.4 8.7v3.6', value: '78%', off: (107 * 0.22).toFixed(0), fill: accent },
+        { name: '充电盒', d: 'M4 6.4h8A1.6 1.6 0 0 1 13.6 8v1.6a1.6 1.6 0 0 1-1.6 1.6H4a1.6 1.6 0 0 1-1.6-1.6V8A1.6 1.6 0 0 1 4 6.4zM6.6 8.8h2.8', value: '92%', off: (107 * 0.08).toFixed(0), fill: accent },
+        { name: 'Magic Mouse', d: 'M8 2.9a3.3 3.3 0 0 1 3.3 3.3v3.6a3.3 3.3 0 0 1-6.6 0V6.2A3.3 3.3 0 0 1 8 2.9zM8 3.1v3.3', value: '18%', off: (107 * 0.82).toFixed(0), fill: '#a8412c' },
+      ],
+      spark: st.net.map(v => ({ h: Math.round(v * 100) + '%' })),
+      netDown: st.down.toFixed(2) + ' MB/s',
+      netUp: st.up.toFixed(2) + ' MB/s',
+      netTotals: [
+        { label: '今日 ↓', value: '4.82 GB', fg: 'var(--fg)' },
+        { label: '↑', value: '742 MB', fg: 'var(--fg)' },
+        { label: '合计', value: '5.54 GB', fg: accentText },
+      ],
+      procCols: [
+        { key: 'cpu', label: 'CPU', w: '116px' },
+        { key: 'energy', label: '能耗', w: '62px' },
+        { key: 'mem', label: '内存', w: '70px' },
+      ].map(c => ({
+        label: c.label, w: c.w,
+        arrow: st.sortBy === c.key ? '▼' : '',
+        fg: st.sortBy === c.key ? 'var(--fg)' : 'rgba(var(--fg-rgb),.6)',
+        go: () => this.setState({ sortBy: c.key }),
+      })),
+      procs: PROCS.filter(p => st.killed.indexOf(p[0]) < 0)
+        .map(p => ({ name: p[0], cpuN: p[0] === 'Code Helper (Renderer)' ? p[1] + (st.tick % 3) * 0.6 : p[1], energyN: p[2], memN: p[4] }))
+        .sort((a, b) => (st.sortBy === 'energy' ? (b.energyN || -1) - (a.energyN || -1) : st.sortBy === 'mem' ? b.memN - a.memN : b.cpuN - a.cpuN))
+        .map((p, i) => ({
+          name: p.name, cpu: p.cpuN.toFixed(1), w: Math.min(100, p.cpuN * 2.1) + '%',
+          energy: p.energyN === null ? '——' : p.energyN.toFixed(1),
+          mem: p.memN < 1024 ? p.memN + ' MB' : (p.memN / 1024).toFixed(1) + ' GB',
+          bg: i === 0 ? 'rgba(var(--fg-rgb),.035)' : 'transparent',
+          sep: i === 0 ? 'none' : '1px solid rgba(var(--fg-rgb),.06)',
+          kill: () => this.setState({ killed: st.killed.concat([p.name]) }),
+        })),
+      quickActions: [
+        { label: '深度清理', size: '105.6 GB', cmd: '缓存、日志、浏览器残留', go: () => this.go('clean') },
+        { label: '项目产物', size: '15.1 GB', cmd: '6 个项目的依赖与构建文件', go: () => this.go('purge') },
+        { label: '卸载应用', size: '13.7 GB', cmd: '5 个长期未使用的应用', go: () => this.go('uninstall') },
+        { label: '磁盘分析', size: '156.8 GB', cmd: '看看空间都去哪了', go: () => this.go('analyze') },
+      ],
+
+      crumbs, diskRows,
+      analyzeTotal: st.analyzeMode === 'large' ? '54.8 GB' : '156.8 GB',
+      analyzeTabs: [tab('tree', '按目录'), tab('large', '大文件')],
+      isSettings: view === 'settings',
+      settingGroups,
+      goSettings: () => this.go('settings'),
+      theme: theme,
+      themeIcon: theme === 'dark' ? ICONS.moon : ICONS.sun,
+      gearIcon: ICONS.gear,
+      deskBg: theme === 'dark'
+        ? 'radial-gradient(75% 65% at 20% 8%,#2a3138 0%,rgba(42,49,56,0) 64%),radial-gradient(85% 75% at 82% 98%,#232a31 0%,rgba(35,42,49,0) 62%),linear-gradient(165deg,#1a1d20 0%,#111316 100%)'
+        : 'radial-gradient(75% 62% at 18% 8%,#dfe4ea 0%,rgba(223,228,234,0) 64%),radial-gradient(85% 72% at 84% 98%,#e7e9ee 0%,rgba(231,233,238,0) 62%),linear-gradient(165deg,#f3f4f7 0%,#e2e5ea 100%)',
+      toggleTheme: () => this.setState({ themeMode: theme === 'dark' ? 'light' : 'dark' }),
+
+      updateOpen: !!st.upd,
+      updTitle: st.upd === 'checking' ? '正在检查更新…' : st.upd === 'downloading' ? '正在下载 Mole 1.1' : st.upd === 'ready' ? '更新已就绪' : 'Mole 1.1 可以更新了',
+      updMeta: st.upd === 'ready' ? '重新启动后生效，当前工作不会丢失' : st.upd === 'checking' ? '当前版本 1.0.0' : '当前 1.0.0 → 新版本 1.1.0 · 12.4 MB',
+      updHasNotes: st.upd === 'available' || st.upd === 'ready',
+      updNotes: [
+        { text: '磁盘分析新增按文件类型汇总，扫描速度提升约 40%' },
+        { text: '清理前可以单独排除某个应用的缓存' },
+        { text: '修复外置磁盘偶尔重复计算体积的问题' },
+      ],
+      updBusy: st.upd === 'checking' || st.upd === 'downloading',
+      updProgressW: (st.upd === 'checking' ? 30 : st.updProgress) + '%',
+      updProgressText: st.upd === 'checking' ? '连接更新服务器' : '已下载 ' + (st.updProgress * 0.124).toFixed(1) + ' MB / 12.4 MB',
+      updSecondary: st.upd === 'ready' ? '稍后重启' : st.upd === 'downloading' ? '取消' : '关闭',
+      updHasPrimary: st.upd === 'available' || st.upd === 'ready',
+      updPrimaryLabel: st.upd === 'ready' ? '立即重启' : '下载并安装',
+      updPrimary: () => { if (st.upd === 'ready') { this.setState({ upd: '' }); } else { this.downloadUpdate(); } },
+      closeUpdate: () => this.setState({ upd: '', updProgress: 0 }),
+      autoUpdMark: st.autoUpd ? '✓' : '',
+      autoUpdBg: st.autoUpd ? 'var(--sel-bg)' : 'transparent',
+      autoUpdBorder: st.autoUpd ? 'var(--sel-bg)' : 'rgba(var(--fg-rgb),.25)',
+      toggleAutoUpdate: () => this.setState({ autoUpd: !st.autoUpd }),
+
+      notifOpen: !!st.notif,
+      notifs: (NOTIFS[st.notif] || []).map(n => ({
+        title: n.title, body: n.body, time: n.time, hasActions: !!n.primaryLabel,
+        primaryLabel: n.primaryLabel,
+        primary: () => { this.setState({ notif: null, upd: st.notif === 'update' ? 'available' : '' }); if (n.to) this.go(n.to); },
+        dismiss: () => this.setState({ notif: null }),
+      })),
+
+      onboarding: ob > 0,
+      obStep1: ob === 1, obStep2: ob === 2, obStep3: ob === 3,
+      obDots: [obDot(1), obDot(2), obDot(3)],
+      obNextLabel: ob === 3 ? '开始使用' : '继续',
+      obSkipLabel: ob === 1 ? '' : '以后再说',
+      obNext: () => this.setState({ onboard: ob >= 3 ? 0 : ob + 1 }),
+      obSkip: () => this.setState({ onboard: 0 }),
+      obPerms: [
+        Object.assign({
+          label: '完全磁盘访问权限', tag: '必需', tagBg: 'rgba(168,65,44,.1)', tagFg: '#a8412c',
+          desc: '没有它，Mole 看不到大部分缓存目录，清理结果会少一大半。',
+          act: () => this.setState({ cfg: Object.assign({}, cfg, { fullDisk: !cfg.fullDisk }) }),
+        }, permBtn(cfg.fullDisk)),
+        Object.assign({
+          label: 'Touch ID', tag: '可选', tagBg: 'rgba(var(--fg-rgb),.07)', tagFg: 'rgba(var(--fg-rgb),.6)',
+          desc: '需要管理员权限时用指纹确认，不用反复输入密码。',
+          act: () => this.setState({ cfg: Object.assign({}, cfg, { touchid: !cfg.touchid }) }),
+        }, permBtn(cfg.touchid)),
+      ],
+      obFreqs: [freq('每周', '推荐 · 周日凌晨执行'), freq('每月', '每月 1 号执行'), freq('关闭', '只在我手动点击时清理')],
+      toggleCharging: () => this.setState({ cfg: Object.assign({}, cfg, { charging: !cfg.charging }) }),
+      chargingLabel: cfg.charging ? '已开启' : '已关闭',
+      chargingBg: cfg.charging ? 'var(--sel-bg)' : 'transparent',
+      chargingFg: cfg.charging ? 'var(--sel-fg)' : 'rgba(var(--fg-rgb),.55)',
+      chargingBorder: cfg.charging ? 'var(--sel-bg)' : 'rgba(var(--fg-rgb),.16)',
+      history: HISTORY.map((h, i) => Object.assign({}, h, { sep: i === 0 ? 'none' : '1px solid rgba(var(--fg-rgb),.08)' })),
+
+      hudOpen: st.hud,
+      toggleHud: () => this.setState({ hud: !st.hud }),
+      hudChipBg: st.hud ? 'rgba(255,255,255,.22)' : 'transparent',
+      hudFree: '223.5 GB',
+      runDur: (1.5 - st.mem / 100 * 1.15).toFixed(2) + 's',
+      hudProcs: PROCS.slice(0, 12).map((p, i) => {
+        const c = i === 0 ? p[1] + (st.tick % 3) * 0.6 : p[1];
+        return { i: i + 1, name: p[0], cpu: c.toFixed(1) + '%', mem: p[4] < 1024 ? p[4] + ' MB' : (p[4] / 1024).toFixed(1) + ' GB', cpuFg: c > 20 ? '#a8412c' : 'rgba(var(--fg-rgb),.6)' };
+      }),
+      runNote: '内存占用 ' + st.mem.toFixed(0) + '%，鼹鼠跑得' + (st.mem > 65 ? '很急' : st.mem > 55 ? '稍快' : '不慌'),
+      clock: '周六 09:41',
+      hudMeters: [
+        { label: '可用空间', value: '223.5 GB', w: '32.8%', fill: accent },
+        { label: 'CPU', value: st.cpu.toFixed(0) + '%', w: st.cpu + '%', fill: 'rgba(var(--fg-rgb),.7)' },
+        { label: '内存', value: st.mem.toFixed(0) + '%', w: st.mem + '%', fill: 'rgba(var(--fg-rgb),.7)' },
+      ],
+      hudActions: [
+        { label: '快速清理', size: '105.6 GB', go: () => { this.setState({ hud: false }); this.go('clean'); } },
+        { label: '项目产物', size: '15.1 GB', go: () => { this.setState({ hud: false }); this.go('purge'); } },
+        { label: '打开主窗口', size: '', go: () => this.setState({ hud: false }) },
+      ],
+
+      showBar: this.props.showSummaryBar !== false && (ph === 'ready' || view === 'analyze' || view === 'settings' || view === 'history'),
+      barText: ph === 'ready'
+        ? (picked.length ? '已选 ' + picked.length + ' 项 · ' + fmt(selGb) + (view === 'optimize' ? ' · 不会删除个人文件' : ' · 将移入废纸篓，可随时还原') : '还没有选中任何项目')
+        : (view === 'analyze' ? '选中文件后按删除，会移入废纸篓'
+          : view === 'settings' ? '设置会立即生效'
+          : view === 'history' ? '记录保存在本机，可随时清空'
+          : ''),
+      canExecute: ph === 'ready' && picked.length > 0,
+      execLabel: view === 'optimize' ? '开始优化' : '开始清理',
+      askExecute: this.askExecute,
+      cancelExecute: this.cancelExecute,
+      runExecute: this.runExecute,
+      confirmOpen: st.confirmOpen,
+      confirmTitle: view === 'optimize' ? '开始系统优化？' : '确认清理这 ' + picked.length + ' 项？',
+      confirmBody: view === 'optimize'
+        ? '只会重建系统缓存与索引，不会动你的个人文件。过程中 Finder 和 Dock 会短暂刷新。'
+        : '共 ' + fmt(selGb) + '。这些内容会移入废纸篓，30 天内可以随时还原，也可以在「操作记录」里查看。',
+      confirmRows: picked.map((r, i) => ({ path: r.name, size: fmt(r.gb), sep: i === 0 ? 'none' : '1px solid rgba(var(--fg-rgb),.08)' })),
+    };
+  }
+}
+
+</script>
+</body>
+</html>
