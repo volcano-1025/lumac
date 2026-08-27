@@ -163,6 +163,7 @@ private struct ReadyStage: View {
                         .help(model.result.skipped.joined(separator: "\n"))
                 }
                 Spacer()
+                EmptyTrashButton()
                 SecondaryButton(title: "重新检查") { model.scan() }
                 PrimaryButton(title: "清理所选") {
                     if app.requireConfirm && model.selectionIsRisky {
@@ -414,6 +415,9 @@ private struct DoneStage: View {
                 }
 
                 HStack(spacing: 10) {
+                    // Right after a cleanup the Trash has just grown — offer to
+                    // empty it here, where the user actually lands.
+                    EmptyTrashButton()
                     SecondaryButton(title: "打开废纸篓") { Trash.openTrash() }
                     PrimaryButton(title: "再检查一次") { model.scan() }
                 }
@@ -425,6 +429,96 @@ private struct DoneStage: View {
 }
 
 // MARK: - 空态与失败
+
+/// Empties the Trash — a permanent, non-undoable delete kept deliberately apart
+/// from the move-to-Trash cleanup. Self-contained so both the ready and empty
+/// stages can drop it in: size probe (off-main), confirmation, Touch ID gate,
+/// and a note when root-owned items can't be removed without sudo. Shows nothing
+/// when the Trash is empty.
+private struct EmptyTrashButton: View {
+    @Environment(AppState.self) private var app
+    @State private var trashBytes: Int64 = 0
+    @State private var confirming = false
+    @State private var emptying = false
+    @State private var progress: Double = 0
+    @State private var note: String?
+    /// Full paths the plain empty couldn't remove (root-owned), kept so the
+    /// alert's elevate button knows what to delete.
+    @State private var rootFailed: [String] = []
+
+    var body: some View {
+        // The else branch renders a real (zero-size) view rather than an
+        // EmptyView, so `.task` always has a host to fire on — an empty Group
+        // silently drops the task, leaving trashBytes stuck at 0 forever and
+        // the button never appearing.
+        stack
+        .confirmationDialog("清空废纸篓", isPresented: $confirming) {
+            Button("永久清空", role: .destructive) { run() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("废纸篓里的 \(Size.format(trashBytes)) 将被永久删除，无法还原。")
+        }
+        .alert("废纸篓", isPresented: Binding(
+            get: { note != nil }, set: { if !$0 { note = nil } }
+        )) {
+            // Root-owned leftovers can't be cleared by lumac (TCC guards
+            // ~/.Trash and the items need root). Finder is entitled to empty
+            // them, so send the user there to finish manually.
+            if !rootFailed.isEmpty {
+                Button("打开废纸篓") { Trash.openTrash() }
+            }
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(note ?? "")
+        }
+        .task { await refresh() }
+    }
+
+    @ViewBuilder private var stack: some View {
+        if emptying {
+            // Emptying can take a while for a large Trash — show live progress
+            // in place of the button rather than freezing on a tapped control.
+            HStack(spacing: 8) {
+                ProgressView(value: progress)
+                    .progressViewStyle(.linear)
+                    .frame(width: 90)
+                Text("清空中 \(Int(progress * 100))%")
+                    .font(Typo.aux)
+                    .foregroundStyle(Palette.fg(0.7))
+            }
+        } else if trashBytes > 0 {
+            SecondaryButton(title: "清空废纸篓 \(Size.format(trashBytes))",
+                            destructive: true) { confirming = true }
+        } else {
+            Color.clear.frame(width: 0, height: 0)
+        }
+    }
+
+    /// A large Trash is slow to walk, so size it off the main actor.
+    private func refresh() async {
+        trashBytes = await Task.detached(priority: .utility) { Trash.trashSize() }.value
+    }
+
+    private func run() {
+        Task {
+            guard await app.confirmBiometric("确认清空废纸篓") else { return }
+            emptying = true
+            progress = 0
+            let result = await Trash.emptyTrash { self.progress = $0 }
+            emptying = false
+            await refresh()
+            rootFailed = result.failed
+            // Confirm completion; when root-owned items remain, the alert grows a
+            // "打开废纸篓" button (see body) so the user can finish in Finder,
+            // which is entitled to empty them.
+            if result.failed.isEmpty {
+                note = "已清空 \(Size.format(result.freedBytes))。"
+            } else {
+                note = "已清空 \(Size.format(result.freedBytes))，还有 \(result.failed.count) 项属于系统（root），lumac 删不了。请打开废纸篓，在访达里手动清空。"
+            }
+        }
+    }
+}
 
 private struct EmptyStage: View {
     var model: CleanupModel
@@ -447,8 +541,13 @@ private struct EmptyStage: View {
                 Text("这台 Mac 目前很干净，过段时间再来看看。")
                     .font(Typo.body)
                     .foregroundStyle(Palette.fg(0.58))
-                SecondaryButton(title: "重新检查") { model.scan() }
-                    .padding(.top, 4)
+                // The Trash can still be full even when nothing is cleanable —
+                // e.g. right after a cleanup — so the empty action lives here too.
+                HStack(spacing: 10) {
+                    EmptyTrashButton()
+                    SecondaryButton(title: "重新检查") { model.scan() }
+                }
+                .padding(.top, 4)
             }
             Spacer()
         }

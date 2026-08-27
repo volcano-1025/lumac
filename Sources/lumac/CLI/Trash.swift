@@ -144,6 +144,55 @@ enum Trash {
     }
 
     static func openTrash() {
-        NSWorkspace.shared.open(URL(fileURLWithPath: NSHomeDirectory() + "/.Trash"))
+        NSWorkspace.shared.open(URL(fileURLWithPath: trashPath))
+    }
+
+    // MARK: - Emptying
+
+    static var trashPath: String { NSHomeDirectory() + "/.Trash" }
+
+    /// Bytes currently sitting in the Trash. Slow for a large Trash, so callers
+    /// run it off the main actor.
+    static func trashSize() -> Int64 { directorySize(trashPath) }
+
+    struct EmptyResult {
+        var removed = 0
+        var freedBytes: Int64 = 0
+        /// Full paths that couldn't be removed (in practice root-owned items).
+        var failed: [String] = []
+    }
+
+    /// Permanently removes everything in the user's Trash — this is the one
+    /// deletion in the app that cannot be undone, so callers gate it behind an
+    /// explicit confirmation. Root-owned items (e.g. something moved in with
+    /// `sudo mv`) can't be removed without elevation and are reported by name
+    /// rather than silently skipped. Progress is a 0...1 fraction over the
+    /// top-level items, mirroring `run(paths:)`.
+    static func emptyTrash(
+        progress: @MainActor @escaping (Double) -> Void = { _ in }
+    ) async -> EmptyResult {
+        var result = EmptyResult()
+        let fileManager = FileManager.default
+        let url = URL(fileURLWithPath: trashPath)
+        guard let items = try? fileManager.contentsOfDirectory(
+            at: url, includingPropertiesForKeys: nil
+        ) else {
+            await progress(1)
+            return result
+        }
+
+        for (index, item) in items.enumerated() {
+            await progress(Double(index) / Double(items.count))
+            let size = directorySize(item.path)
+            do {
+                try fileManager.removeItem(at: item)
+                result.removed += 1
+                result.freedBytes += size
+            } catch {
+                result.failed.append(item.path)
+            }
+        }
+        await progress(1)
+        return result
     }
 }

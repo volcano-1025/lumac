@@ -31,6 +31,20 @@ enum MoleConfig {
     static func readPurgePaths() -> [String] { entries(of: purgePathsFile) }
     static func readWhitelist() -> [String] { entries(of: whitelistFile) }
 
+    /// Adds `~/.Trash` to mole's whitelist so `mo clean` stops scanning it.
+    /// lumac surfaces the Trash through its own "empty trash" action, and having
+    /// mo re-scan the Trash on every cleanup was pure waste. Idempotent: writes
+    /// only when the entry is missing, preserving the user's other entries.
+    /// Returns true when it actually wrote.
+    @discardableResult
+    static func ensureTrashWhitelisted() -> Bool {
+        let entry = "~/.Trash"
+        var current = readWhitelist()
+        guard !current.contains(entry) else { return false }
+        current.append(entry)
+        return writeWhitelist(current)
+    }
+
     @discardableResult
     static func writePurgePaths(_ lines: [String]) -> Bool {
         write(purgePathsFile, lines: lines, header: purgeHeader)

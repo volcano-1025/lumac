@@ -128,6 +128,76 @@ actor MoCLI {
         }
     }
 
+    /// Runs `mo uninstall <name>` to completion, feeding confirmations to its
+    /// two prompts ("[y/N]" then "Enter confirm"). Used only for root-owned apps
+    /// lumac can't trash as the logged-in user: mo removes them through its own
+    /// Touch ID + passwordless sudoers rule, so this reuses that elevation
+    /// instead of lumac installing one of its own. mo does its own ~40s leftover
+    /// scan, so callers should show progress. Returns combined stdout+stderr;
+    /// throws on a non-zero exit. mo trashes by default (recoverable) — no
+    /// `--permanent`.
+    func uninstallApp(named name: String) async throws -> String {
+        let path = try binaryPath()
+        return try await withCheckedThrowingContinuation { continuation in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: path)
+            process.arguments = ["uninstall", name]
+
+            var environment = ProcessInfo.processInfo.environment
+            environment["NO_COLOR"] = "1"
+            environment["TERM"] = "dumb"
+            process.environment = environment
+
+            let stdin = Pipe()
+            let out = Pipe()
+            let err = Pipe()
+            process.standardInput = stdin
+            process.standardOutput = out
+            process.standardError = err
+
+            do {
+                try process.run()
+            } catch {
+                continuation.resume(throwing: error)
+                return
+            }
+
+            // "y" clears the [y/N] prompt; the trailing newlines answer the
+            // final "Enter confirm". Pre-writing then closing is fine — mo reads
+            // each byte as it reaches the matching prompt. Touch ID (if mo asks)
+            // is a separate GUI sheet, not stdin.
+            if let data = "y\n\n\n".data(using: .utf8) {
+                stdin.fileHandleForWriting.write(data)
+            }
+            try? stdin.fileHandleForWriting.close()
+
+            let errQueue = DispatchQueue(label: "app.lumac.mo.uninstall.stderr")
+            let group = DispatchGroup()
+            var errData = Data()
+            group.enter()
+            errQueue.async {
+                errData = err.fileHandleForReading.readDataToEndOfFile()
+                group.leave()
+            }
+            let outData = out.fileHandleForReading.readDataToEndOfFile()
+            group.wait()
+            process.waitUntilExit()
+
+            let stdout = String(data: outData, encoding: .utf8) ?? ""
+            let stderr = String(data: errData, encoding: .utf8) ?? ""
+            let combined = stdout + (stderr.isEmpty ? "" : "\n" + stderr)
+
+            if process.terminationStatus != 0 {
+                continuation.resume(throwing: CLIError.failed(
+                    command: "uninstall \(name)",
+                    status: process.terminationStatus,
+                    output: combined))
+            } else {
+                continuation.resume(returning: combined)
+            }
+        }
+    }
+
     private let decoder: JSONDecoder = {
         let d = JSONDecoder()
         d.keyDecodingStrategy = .convertFromSnakeCase

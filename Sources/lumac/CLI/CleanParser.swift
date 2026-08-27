@@ -24,6 +24,13 @@ enum CleanParser {
         // Walk the categories in the order stdout reported them, so the list
         // reads the way the CLI grouped it.
         for category in meta.order {
+            // The Trash is where cleaning *sends* files — listing it as a
+            // cleanable category is circular (re-trashing already-trashed files
+            // frees nothing) and re-scans the Trash after every cleanup. lumac
+            // empties it through a dedicated button instead. mo is also told to
+            // whitelist ~/.Trash, so this is normally moot — kept as a guard in
+            // case that whitelist entry isn't in place.
+            guard category != "Trash" else { continue }
             guard let entries = dump.paths(for: category), !entries.isEmpty else { continue }
             let info = meta.categories[category]
 

@@ -42,6 +42,8 @@ final class UninstallModel {
     // Run
     var progress: Double = 0
     var outcome: Trash.Outcome?
+    /// True while the native admin prompt is up for a privileged removal.
+    var elevating = false
 
     private var task: Task<Void, Never>?
 
@@ -125,19 +127,47 @@ final class UninstallModel {
             }
             guard !Task.isCancelled else { return }
             self.outcome = outcome
+
+            // The app bundle is root-owned and the native trash couldn't touch
+            // it — don't stop at a failure screen. Hand it straight to mo, which
+            // elevates, staying on the progress view. uninstallViaMo folds the
+            // app into the outcome and records history; only if mo *also* fails
+            // does the done screen surface the manual fallback.
+            if let selected = self.selected,
+               self.isRootOwnedAppFailure(outcome, appPath: selected.path) {
+                _ = await self.uninstallViaMo()
+                guard !Task.isCancelled else { return }
+                self.stage = .done
+                return
+            }
+
             self.stage = .done
-            if !outcome.trashed.isEmpty {
+            // Only count this as an uninstall if the app *bundle* actually left.
+            // Trashing a few user-owned leftovers while the app itself failed is
+            // not a completed uninstall and must not be logged or drop the app
+            // from the list — that's what produced the bogus repeated entries.
+            let appRemoved = self.selected.map { outcome.trashed.contains($0.path) } ?? false
+            if appRemoved {
                 HistoryStore.shared.add(command: "uninstall",
                                         freedBytes: outcome.freedBytes,
                                         itemCount: outcome.trashed.count,
                                         note: self.selected?.name)
-            }
-            // The app is gone from disk; drop it from the list so returning to
-            // the grid reflects reality without a full rescan.
-            if let selected = self.selected {
-                self.apps.removeAll { $0.id == selected.id }
+                // The app is gone from disk; drop it from the list so returning
+                // to the grid reflects reality without a full rescan.
+                if let selected = self.selected {
+                    self.apps.removeAll { $0.id == selected.id }
+                }
             }
         }
+    }
+
+    /// True when the app bundle itself is in the failure list because it's owned
+    /// by another user (root) — the one case worth auto-delegating to mo.
+    private func isRootOwnedAppFailure(_ outcome: Trash.Outcome, appPath: String) -> Bool {
+        guard outcome.failed.contains(where: { $0.path == appPath }) else { return false }
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: appPath),
+              let owner = attrs[.ownerAccountID] as? NSNumber else { return false }
+        return owner.uint32Value != getuid()
     }
 
     func reset() {
@@ -147,5 +177,56 @@ final class UninstallModel {
         preview = nil
         outcome = nil
         progress = 0
+    }
+
+    /// Removes a root-owned app that lumac couldn't trash itself by delegating to
+    /// `mo uninstall <name>` — mo already carries a Touch ID + passwordless
+    /// sudoers rule, so this reuses that elevation rather than lumac installing
+    /// one. Only used for the rare root-owned case; normal apps stay on the fast
+    /// native path. On success the done screen flips to a real removal and the
+    /// app drops out of the list. Returns nil on success, or a message to show.
+    func uninstallViaMo() async -> String? {
+        guard let selected else { return "没有选中的应用" }
+        // mo matches on the app's on-disk name; the bundle filename is closer to
+        // that than a localized display name.
+        let name = (selected.path as NSString).lastPathComponent
+            .replacingOccurrences(of: ".app", with: "")
+
+        elevating = true
+        defer { elevating = false }
+
+        let output: String
+        do {
+            output = try await MoCLI.shared.uninstallApp(named: name)
+        } catch {
+            return error.localizedDescription
+        }
+
+        // mo returns 0 even when it matched nothing, so confirm from the text.
+        let removed = output.localizedCaseInsensitiveContains("Uninstall complete")
+            || output.localizedCaseInsensitiveContains("Removed 1 app")
+            || output.localizedCaseInsensitiveContains("Removed")
+        let matchedNone = output.localizedCaseInsensitiveContains("No matching")
+            || output.localizedCaseInsensitiveContains("No application found")
+        guard removed, !matchedNone else {
+            return "mo 未能完成卸载。可改用「复制命令」在终端手动删除。"
+        }
+
+        var totalFreed = selected.bytes
+        if var updated = outcome {
+            updated.failed.removeAll { $0.path == selected.path }
+            if !updated.trashed.contains(selected.path) {
+                updated.trashed.append(selected.path)
+            }
+            updated.freedBytes += selected.bytes  // native leftovers + the app
+            totalFreed = updated.freedBytes
+            outcome = updated
+        }
+        HistoryStore.shared.add(command: "uninstall",
+                                freedBytes: totalFreed,
+                                itemCount: 1,
+                                note: selected.name)
+        apps.removeAll { $0.id == selected.id }
+        return nil
     }
 }

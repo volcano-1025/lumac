@@ -60,6 +60,12 @@ final class CleanupModel {
             return
         }
 
+        // Keep the Trash out of mo's clean scan — lumac empties it via its own
+        // button, and re-scanning it every time was the slow, circular part.
+        if command.scanStrategy == .cleanDump {
+            MoleConfig.ensureTrashWhitelisted()
+        }
+
         // Anything older than the run we are about to start is a leftover from
         // a previous scan and must not be presented as this scan's result.
         let startedAt = Date()

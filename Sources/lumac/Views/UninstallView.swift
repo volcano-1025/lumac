@@ -277,13 +277,25 @@ private struct RunningStage: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Text("正在移入废纸篓…")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Palette.fg)
-            ProgressView(value: model.progress)
-                .progressViewStyle(.linear)
-                .tint(Palette.selBg)
-                .frame(width: 260)
+            if model.elevating {
+                // Root-owned app handed to mo — it does its own ~40s leftover
+                // scan, no parseable progress, so the bar is indeterminate.
+                Text("正在通过管理员权限删除…（约 40 秒）")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Palette.fg)
+                ProgressView()
+                    .progressViewStyle(.linear)
+                    .tint(Palette.selBg)
+                    .frame(width: 260)
+            } else {
+                Text("正在移入废纸篓…")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Palette.fg)
+                ProgressView(value: model.progress)
+                    .progressViewStyle(.linear)
+                    .tint(Palette.selBg)
+                    .frame(width: 260)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -291,13 +303,26 @@ private struct RunningStage: View {
 
 private struct DoneStage: View {
     var model: UninstallModel
+    @State private var copied = false
+    @State private var elevateNote: String?
 
     var body: some View {
         let outcome = model.outcome
         let trashedCount = outcome?.trashed.count ?? 0
         let failed = outcome?.failed ?? []
-        // Nothing moved but things failed → this is a failure, not a success.
-        let allFailed = trashedCount == 0 && !failed.isEmpty
+        // A failed uninstall is either: nothing moved at all, or — the case that
+        // used to slip through as "success" — the app *bundle itself* failed
+        // while only small leftovers got trashed. Removing the app is the whole
+        // point, so if its bundle is still on disk, this is not a success.
+        let appPath = model.selected?.path
+        let appBundleFailed = appPath.map { p in failed.contains { $0.path == p } } ?? false
+        let allFailed = (trashedCount == 0 && !failed.isEmpty) || appBundleFailed
+        // Files owned by root can't be trashed by a self-signed, non-elevated
+        // app however the TCC switches are set — the block is Unix ownership,
+        // not Full Disk Access. Steer these to Terminal + sudo instead of the
+        // (useless here) "go enable permissions" advice.
+        let rootPaths = rootOwnedPaths(failed)
+        let rootBlocked = !rootPaths.isEmpty
 
         return VStack(spacing: 12) {
             Image(systemName: allFailed ? "xmark.circle.fill" : "checkmark.circle.fill")
@@ -310,8 +335,8 @@ private struct DoneStage: View {
                 .foregroundStyle(Palette.fg)
 
             if allFailed {
-                // Surface the real reason — usually a missing permission.
-                Text(reason(failed))
+                // Surface the real reason — root ownership vs. a missing grant.
+                Text(reason(failed, rootPaths: rootPaths))
                     .font(Typo.aux)
                     .foregroundStyle(Palette.fg(0.7))
                     .multilineTextAlignment(.center)
@@ -325,7 +350,18 @@ private struct DoneStage: View {
             }
 
             HStack(spacing: 10) {
-                if allFailed {
+                if allFailed && rootBlocked {
+                    // The app is root-owned — FDA can't help. Hand it to mo,
+                    // which elevates through its own Touch ID + sudoers rule;
+                    // keep the manual command as a fallback.
+                    SecondaryButton(title: model.elevating ? "正在删除…（约 40 秒）" : "用管理员权限删除") {
+                        elevate()
+                    }
+                    .disabled(model.elevating)
+                    SecondaryButton(title: copied ? "已复制 ✓" : "复制命令") {
+                        copySudoCommand(rootPaths)
+                    }
+                } else if allFailed {
                     SecondaryButton(title: "去开启完全磁盘访问") { FullDiskAccess.openSettings() }
                 } else {
                     SecondaryButton(title: "打开废纸篓") { Trash.openTrash() }
@@ -334,12 +370,52 @@ private struct DoneStage: View {
             }
             .padding(.top, 4)
         }
+        .alert("提权删除", isPresented: Binding(
+            get: { elevateNote != nil }, set: { if !$0 { elevateNote = nil } }
+        )) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(elevateNote ?? "")
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// A plain-language explanation built from the first failure reason.
-    private func reason(_ failed: [(path: String, reason: String)]) -> String {
+    /// Removes the root-owned app via mo (Touch ID + its sudoers rule), then
+    /// surfaces any failure. On success the view flips to "已移入废纸篓" on its
+    /// own, since the app leaves `failed`.
+    private func elevate() {
+        Task {
+            if let error = await model.uninstallViaMo() {
+                elevateNote = error
+            }
+        }
+    }
+
+    /// Failed paths owned by another user (in practice root). lumac can't trash
+    /// these as the logged-in user, but it can remove them through a one-shot
+    /// admin authorization (see `elevate`), so they get their own message and
+    /// buttons.
+    private func rootOwnedPaths(_ failed: [(path: String, reason: String)]) -> [String] {
+        let me = getuid()
+        return failed.compactMap { f in
+            guard let attrs = try? FileManager.default.attributesOfItem(atPath: f.path),
+                  let owner = attrs[.ownerAccountID] as? NSNumber,
+                  owner.uint32Value != me else { return nil }
+            return f.path
+        }
+    }
+
+    /// A plain-language explanation built from the failure reasons.
+    private func reason(_ failed: [(path: String, reason: String)], rootPaths: [String]) -> String {
         let raw = failed.first?.reason ?? ""
+
+        // Root-owned files: TCC grants are irrelevant, elevation is the only way.
+        if !rootPaths.isEmpty {
+            let cmd = sudoCommand(rootPaths)
+            let noun = rootPaths.count == 1 ? "这个文件属于系统（root）" : "这些文件属于系统（root）"
+            return "\(noun)，需要管理员权限。点下面「用管理员权限删除」授权一次即可移入废纸篓；也可在终端手动：\n\(cmd)"
+        }
+
         let permissionish = raw.localizedCaseInsensitiveContains("permission")
             || raw.localizedCaseInsensitiveContains("权限")
             || raw.contains("513") || raw.contains("257")
@@ -347,6 +423,22 @@ private struct DoneStage: View {
             return "没有权限移动这些文件。请在「系统设置 › 隐私与安全性」里给 lumac 开启完全磁盘访问，以及在「App 管理」里允许 lumac，然后重试。\n（\(raw)）"
         }
         return raw.isEmpty ? "没有文件被移除。" : raw
+    }
+
+    /// A `sudo mv … ~/.Trash/` line covering every root-owned path, each quoted.
+    /// Moving to the Trash keeps the removal recoverable; the moved bundle stays
+    /// root-owned, which only matters when the user later empties the Trash.
+    /// `~` expands in the user's shell before sudo runs, so it points at the
+    /// real user's Trash, not root's.
+    private func sudoCommand(_ paths: [String]) -> String {
+        "sudo mv " + paths.map { "\"\($0)\"" }.joined(separator: " ") + " ~/.Trash/"
+    }
+
+    private func copySudoCommand(_ paths: [String]) {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(sudoCommand(paths), forType: .string)
+        copied = true
     }
 }
 
