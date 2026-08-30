@@ -17,6 +17,19 @@ struct HistoryRecord: Codable, Identifiable {
     var itemCount: Int
     /// Optional detail — the uninstalled app's name, or the optimize summary.
     var note: String?
+    /// What was moved and where it landed, so the operation can be reversed.
+    ///
+    /// Absent on records written before this existed, and on operations that
+    /// have nothing to put back: 系统优化 deletes nothing, and the part of an
+    /// uninstall that mo carries out is trashed by mo, which never tells lumac
+    /// where it put things.
+    var moves: [Trash.Move]?
+    /// Set once the moves have been put back.
+    var undoneAt: Date?
+
+    /// Whether the 撤销 button applies. Whether the files are still *there* is a
+    /// separate question, answered when the restore actually runs.
+    var canUndo: Bool { undoneAt == nil && !(moves ?? []).isEmpty }
 }
 
 @MainActor
@@ -44,12 +57,28 @@ final class HistoryStore {
     }
 
     /// Records one completed operation, newest first.
-    func add(command: String, freedBytes: Int64, itemCount: Int, note: String? = nil) {
+    func add(command: String, freedBytes: Int64, itemCount: Int,
+             note: String? = nil, moves: [Trash.Move] = []) {
         records.insert(HistoryRecord(command: command, date: Date(),
-                                     freedBytes: freedBytes, itemCount: itemCount, note: note),
+                                     freedBytes: freedBytes, itemCount: itemCount,
+                                     note: note, moves: moves.isEmpty ? nil : moves),
                        at: 0)
         if records.count > cap { records.removeLast(records.count - cap) }
         save()
+    }
+
+    /// Puts one operation's files back. Returns what happened, for the message.
+    ///
+    /// The record is only marked undone when something actually came back — a
+    /// Trash that has since been emptied leaves nothing to restore, and marking
+    /// it anyway would claim a rollback that never occurred.
+    func undo(_ record: HistoryRecord) async -> Trash.RestoreResult {
+        let result = await Trash.restore(record.moves ?? [])
+        guard !result.restored.isEmpty,
+              let index = records.firstIndex(where: { $0.id == record.id }) else { return result }
+        records[index].undoneAt = Date()
+        save()
+        return result
     }
 
     private func save() {

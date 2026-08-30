@@ -5,6 +5,10 @@ import SwiftUI
 /// page) and never sees lumac's own Trash operations.
 struct HistoryView: View {
     private var records: [HistoryRecord] { HistoryStore.shared.records }
+    /// The record currently being put back, so its row can show progress and
+    /// the others stay clickable.
+    @State private var undoing: UUID?
+    @State private var note: String?
 
     var body: some View {
         VStack(spacing: 12) {
@@ -18,7 +22,9 @@ struct HistoryView: View {
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             ForEach(records) { record in
-                                HistoryRow(record: record)
+                                HistoryRow(record: record,
+                                           undoing: undoing == record.id,
+                                           onUndo: { undo(record) })
                                 Hairline()
                             }
                         }
@@ -29,6 +35,38 @@ struct HistoryView: View {
         }
         .padding(.horizontal, Metrics.contentPadding)
         .padding(.bottom, Metrics.contentPadding)
+        .alert("撤销", isPresented: Binding(
+            get: { note != nil }, set: { if !$0 { note = nil } })
+        ) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(note ?? "")
+        }
+    }
+
+    /// Moves the operation's files back out of the Trash. Not gated behind a
+    /// confirmation: nothing is destroyed, and `Trash.restore` refuses rather
+    /// than overwrites when something already sits at the original path.
+    private func undo(_ record: HistoryRecord) {
+        guard undoing == nil else { return }
+        undoing = record.id
+        Task {
+            let result = await HistoryStore.shared.undo(record)
+            undoing = nil
+            note = message(for: result)
+        }
+    }
+
+    private func message(for result: Trash.RestoreResult) -> String {
+        if result.restored.isEmpty {
+            let why = result.failed.first?.reason ?? "没有可以还原的内容"
+            return "没有还原任何内容：\(why)"
+        }
+        var text = "已还原 \(result.restored.count) 项（\(Size.format(result.restoredBytes))）到原来的位置。"
+        if !result.failed.isEmpty {
+            text += "\n另有 \(result.failed.count) 项没能还原：\(result.failed.first?.reason ?? "")"
+        }
+        return text
     }
 }
 
@@ -48,6 +86,8 @@ private struct Header: View {
 
 private struct HistoryRow: View {
     var record: HistoryRecord
+    var undoing: Bool
+    var onUndo: () -> Void
     @State private var hovering = false
 
     var body: some View {
@@ -72,6 +112,11 @@ private struct HistoryRow: View {
                             .font(Typo.aux)
                             .foregroundStyle(Palette.fg(0.58))
                     }
+                    if record.undoneAt != nil {
+                        Badge(text: "已撤销",
+                              tint: Palette.fg(0.58),
+                              fill: Palette.fgDecoration(0.08))
+                    }
                 }
                 Text(HistoryLabel.time(record.date))
                     .font(Typo.aux)
@@ -79,6 +124,16 @@ private struct HistoryRow: View {
             }
 
             Spacer(minLength: 12)
+
+            // Only operations that recorded where each file landed can be put
+            // back. 系统优化 moved nothing, and records written before the app
+            // started tracking destinations have nothing to work from.
+            if undoing {
+                ProgressView().controlSize(.small).scaleEffect(0.7)
+            } else if record.canUndo {
+                SecondaryButton(title: "撤销") { onUndo() }
+                    .opacity(hovering ? 1 : 0.55)
+            }
 
             if record.freedBytes > 0 {
                 VStack(alignment: .trailing, spacing: 2) {
