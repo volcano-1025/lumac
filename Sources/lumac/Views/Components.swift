@@ -103,6 +103,39 @@ struct PrimaryButton: View {
     }
 }
 
+/// A primary button that is also the progress indicator for the work it is
+/// waiting on.
+///
+/// The uninstall preview has exactly one control and exactly one thing the user
+/// is waiting for, so the wait belongs on the control rather than in a dialog
+/// over the list they are trying to read.
+struct ProgressPrimaryButton: View {
+    var title: String
+    /// 0...1.
+    var progress: Double
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 12.5, weight: .medium))
+            .foregroundStyle(Palette.selFg)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 7)
+            .frame(minWidth: 150)
+            .background {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Palette.selBg.opacity(0.35))
+                        Capsule()
+                            .fill(Palette.selBg)
+                            .frame(width: geo.size.width * max(0, min(1, progress)))
+                    }
+                }
+            }
+            .clipShape(Capsule())
+            .animation(.easeOut(duration: 0.3), value: progress)
+    }
+}
+
 /// Secondary action — outlined, sits on the content layer.
 struct SecondaryButton: View {
     var title: String

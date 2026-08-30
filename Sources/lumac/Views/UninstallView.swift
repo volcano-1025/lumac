@@ -168,7 +168,10 @@ private struct PreviewStage: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let preview = model.preview {
-            PreviewBody(preview: preview,
+            PreviewBody(model: model,
+                        preview: preview,
+                        source: model.previewSource,
+                        verifying: model.verifying,
                         confirming: $confirming,
                         onExecute: {
                             Task {
@@ -182,91 +185,315 @@ private struct PreviewStage: View {
 
 private struct PreviewBody: View {
     @Environment(AppState.self) private var app
+    var model: UninstallModel
     var preview: UninstallPreview
+    var source: UninstallModel.PreviewSource
+    var verifying: Bool
     @Binding var confirming: Bool
     var onExecute: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("将移入废纸篓 \(preview.trashable.count) 项")
+                Text("已选 \(preview.selectedItems.count)/\(preview.leftovers.count) 项")
                     .font(Typo.aux)
                     .foregroundStyle(Palette.fg(0.58))
+                VerifyStatus(source: source, verifying: verifying)
                 Spacer()
-                Text("可释放 \(Size.format(preview.trashableBytes))")
+                Text("可释放 \(Size.format(preview.selectedBytes))")
                     .font(Typo.mono(13, .medium))
                     .foregroundStyle(Palette.accentText)
+            }
+
+            if let vendor = model.vendorUninstaller {
+                VendorUninstallerBanner(uninstaller: vendor)
             }
 
             Card(padding: 0) {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(preview.trashable) { item in
-                            LeftoverRow(item: item)
-                            Hairline()
+                        // 自动选中 — unambiguously this app's, and removable.
+                        if !preview.auto.isEmpty {
+                            SectionHeader(
+                                title: "自动选中",
+                                detail: "\(preview.auto.count) 项 · \(Size.format(UninstallPreview.bytes(of: preview.auto)))",
+                                note: nil,
+                                checked: model.allSelected(in: .auto),
+                                showsToggle: true,
+                                onToggle: { model.setTier(.auto, !model.allSelected(in: .auto)) })
+                            ForEach(preview.auto) { item in
+                                LeftoverRow(item: item) { model.toggle(item) }
+                                Hairline()
+                            }
+                        }
+
+                        // 需要确认 — everything the user has to rule on. Two
+                        // things live here for different reasons: rows lumac
+                        // *can* remove but that may be shared with another app,
+                        // and rows it cannot remove at all. Each says which.
+                        if !preview.needsReview.isEmpty {
+                            SectionHeader(
+                                title: reviewTitle(preview),
+                                detail: "\(preview.needsReview.count) 项 · \(Size.format(UninstallPreview.bytes(of: preview.needsReview)))",
+                                note: reviewNote(preview),
+                                checked: model.allSelected(in: .confirm),
+                                showsToggle: preview.leftovers.contains { $0.tier == .confirm },
+                                onToggle: { model.setTier(.confirm, !model.allSelected(in: .confirm)) })
+                            ForEach(preview.needsReview) { item in
+                                LeftoverRow(item: item) { model.toggle(item) }
+                                Hairline()
+                            }
                         }
                     }
                 }
                 .scrollIndicators(.hidden)
             }
 
-            // Privileged /Library items lumac cannot trash itself yet.
-            if !preview.privileged.isEmpty {
-                HStack(spacing: 6) {
-                    Image(systemName: "lock.shield")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Palette.danger)
-                    Text("另有 \(preview.privileged.count) 项系统级文件需要授权，本版本暂不处理，可用终端的 mo uninstall 完成。")
-                        .font(Typo.aux)
-                        .foregroundStyle(Palette.fg(0.58))
-                    Spacer()
-                }
-            }
-
             HStack {
                 Spacer()
-                PrimaryButton(title: "移入废纸篓") { confirming = true }
-                    .disabled(preview.trashable.isEmpty)
-                    .opacity(preview.trashable.isEmpty ? 0.4 : 1)
+                // While mo re-checks, the one control on the page carries the
+                // wait: it is already the thing being waited for, and a dialog
+                // over the draft only hid the list the user came to read.
+                if verifying {
+                    ProgressPrimaryButton(
+                        title: model.verifyPhase?.label ?? "正在复核归属…",
+                        progress: model.verifyProgress)
+                        .help("mo 还在复核归属，复核完成后才能删除")
+                } else {
+                    PrimaryButton(title: "移入废纸篓") { confirming = true }
+                        .disabled(!model.canExecute)
+                        .opacity(model.canExecute ? 1 : 0.4)
+                }
             }
         }
         .confirmationDialog("确认卸载", isPresented: $confirming) {
             Button("移入废纸篓", role: .destructive) { onExecute() }
             Button("再看看", role: .cancel) {}
         } message: {
-            Text("应用和它的用户数据会移入废纸篓，可以随时还原。")
+            Text(confirmMessage(preview))
+        }
+    }
+
+    /// Says what will be left behind as well as what will go. Without it the
+    /// dialog reads as "everything listed above is handled", when the item that
+    /// actually matters — 25.5 MB of program under /Library for fuse-t — is one
+    /// lumac cannot touch at all.
+    private func confirmMessage(_ preview: UninstallPreview) -> String {
+        var text = "勾选的 \(preview.selectedItems.count) 项会移入废纸篓，可以随时还原。"
+        let left = preview.leftovers.filter { $0.locked || !$0.selected }
+        if !left.isEmpty {
+            text += "\n另有 \(left.count) 项（\(Size.format(UninstallPreview.bytes(of: left)))）不会被删除，会留在原处。"
+        }
+        return text
+    }
+
+    /// The second section holds two different situations, and calling both of
+    /// them 需要确认 was wrong: when every row is locked there is nothing for
+    /// the user to confirm — lumac cannot act on them at all. The heading says
+    /// which case this is.
+    private func reviewTitle(_ preview: UninstallPreview) -> String {
+        preview.leftovers.contains { $0.tier == .confirm } ? "需要确认" : "lumac 无法删除"
+    }
+
+    private func reviewNote(_ preview: UninstallPreview) -> String {
+        let tickable = preview.leftovers.contains { $0.tier == .confirm }
+        let locked = preview.leftovers.contains { $0.tier == .locked }
+        if tickable && locked { return "默认不选中；带锁的几项 lumac 无法删除，仅作展示。" }
+        if tickable { return "默认不选中，移除前请逐项确认。" }
+        return "仅列出来让你知道卸载后会留下什么。"
+    }
+}
+
+/// Says whose list is on screen. Which app a file belongs to is the one thing
+/// this page can get dangerously wrong, so the answer is stated rather than
+/// implied — and while mo is still working, the list already visible is
+/// explicitly labelled as a draft.
+private struct VerifyStatus: View {
+    var source: UninstallModel.PreviewSource
+    var verifying: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            // Progress lives in the overlay dialog, not here — while it runs
+            // there is nothing to act on, so a line of text competing with the
+            // draft list only adds noise.
+            if verifying {
+                EmptyView()
+            } else {
+                switch source {
+                case .verified:
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Palette.accentText)
+                    Text("已按 mo 的归属规则复核")
+                        .font(Typo.aux)
+                        .foregroundStyle(Palette.fg(0.58))
+                case .unavailable(let why):
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Palette.danger)
+                    Text("\(why)，下面是本机扫描的结果，可能不完整")
+                        .font(Typo.aux)
+                        .foregroundStyle(Palette.fg(0.58))
+                case .native:
+                    EmptyView()
+                }
+            }
         }
     }
 }
 
-private struct LeftoverRow: View {
-    var item: UninstallLeftover
+/// Surfaces an uninstaller the app shipped with itself.
+///
+/// It is the most authoritative list there is — fuse-t's own script removes
+/// four `/usr/local` items no bundle-id sweep finds, and pointedly leaves its
+/// framework alone because other software links it. lumac does not run it:
+/// it is arbitrary vendor code, and the ones that matter demand root that
+/// lumac has no way to grant. So it is shown, and the command is handed over.
+private struct VendorUninstallerBanner: View {
+    var uninstaller: VendorUninstaller
+    @State private var copied = false
 
     var body: some View {
-        HStack(spacing: 11) {
-            Image(systemName: iconName)
+        HStack(spacing: 8) {
+            Image(systemName: "wrench.and.screwdriver")
                 .font(.system(size: 12))
-                .foregroundStyle(Palette.fg(0.5))
-                .frame(width: 16)
-            Text(Trash.abbreviate(item.path))
-                .font(Typo.aux)
-                .foregroundStyle(Palette.fg(0.82))
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Spacer(minLength: 12)
-            Text(Size.format(item.bytes))
-                .font(Typo.mono(11, .medium))
-                .foregroundStyle(Palette.fg(0.7))
-                .frame(width: 60, alignment: .trailing)
+                .foregroundStyle(Palette.accentText)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("这个应用自带官方卸载程序，通常比通用扫描更完整")
+                    .font(Typo.aux.weight(.medium))
+                    .foregroundStyle(Palette.fg(0.82))
+                Text(Trash.abbreviate(uninstaller.path))
+                    .font(Typo.mono(10))
+                    .foregroundStyle(Palette.fg(0.55))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer(minLength: 8)
+            SecondaryButton(title: copied ? "已复制 ✓" : "复制命令") {
+                let pb = NSPasteboard.general
+                pb.clearContents()
+                pb.setString(uninstaller.command, forType: .string)
+                copied = true
+            }
+            SecondaryButton(title: "在访达中显示") {
+                NSWorkspace.shared.activateFileViewerSelecting(
+                    [URL(fileURLWithPath: uninstaller.path)])
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(Palette.accentSoft,
+                    in: RoundedRectangle(cornerRadius: Radius.list, style: .continuous))
+    }
+}
+
+/// A section divider carrying its own count, size and select-all box.
+private struct SectionHeader: View {
+    var title: String
+    var detail: String
+    var note: String?
+    var checked: Bool
+    /// Hidden when the section holds nothing tickable — a 需要确认 list made up
+    /// entirely of locked rows would otherwise show a select-all that does
+    /// nothing.
+    var showsToggle: Bool
+    var onToggle: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(Typo.body.weight(.semibold))
+                    .foregroundStyle(Palette.fg)
+                Text(detail)
+                    .font(Typo.aux)
+                    .foregroundStyle(Palette.fg(0.58))
+                Spacer()
+                if showsToggle {
+                    Button(action: onToggle) {
+                        Image(systemName: checked ? "checkmark.square.fill" : "square")
+                            .font(.system(size: 14))
+                            .foregroundStyle(checked ? Palette.selBg : Palette.fg(0.35))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            if let note {
+                Text(note)
+                    .font(Typo.aux)
+                    .foregroundStyle(Palette.fg(0.5))
+            }
         }
         .padding(.horizontal, Metrics.rowPaddingH)
-        .padding(.vertical, 10)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Palette.panel)
+        .overlay(alignment: .top) { Hairline() }
     }
+}
 
-    private var iconName: String {
-        if item.path.hasSuffix(".app") { return "app" }
-        if item.path.hasSuffix(".plist") { return "doc.text" }
-        return "folder"
+/// One leftover: checkbox, what it is in plain Chinese, the path, the size —
+/// and, when there is a decision to make, the reason underneath.
+private struct LeftoverRow: View {
+    var item: UninstallLeftover
+    var onToggle: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            // Locked rows get a padlock where the checkbox would be: lumac
+            // cannot remove them, so offering a tick would be a lie.
+            Group {
+                if item.locked {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Palette.fg(0.35))
+                        .help("lumac 无法删除这一项")
+                } else {
+                    Button(action: onToggle) {
+                        Image(systemName: item.selected ? "checkmark.square.fill" : "square")
+                            .font(.system(size: 13))
+                            .foregroundStyle(item.selected ? Palette.selBg : Palette.fg(0.35))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .frame(width: 16, height: 16)
+
+            Text(item.kind.label)
+                .font(Typo.aux.weight(.medium))
+                .foregroundStyle(Palette.fg(item.locked ? 0.5 : 0.82))
+                .frame(width: 96, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(Trash.abbreviate(item.path))
+                    .font(Typo.mono(11))
+                    .foregroundStyle(Palette.fg(item.locked ? 0.5 : 0.7))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if let caution = item.caution {
+                    Text(caution)
+                        .font(Typo.badge)
+                        .foregroundStyle(Palette.fg(0.5))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Spacer(minLength: 12)
+
+            Text(Size.format(item.bytes))
+                .font(Typo.mono(11, .medium))
+                .foregroundStyle(Palette.fg(item.locked ? 0.5 : 0.7))
+                .frame(width: 62, alignment: .trailing)
+        }
+        .padding(.horizontal, Metrics.rowPaddingH)
+        .padding(.vertical, 8)
+        .background(hovering && !item.locked ? Palette.hover : Color.clear)
+        .contentShape(Rectangle())
+        .onTapGesture { if !item.locked { onToggle() } }
+        .onHover { hovering = $0 }
     }
 }
 
@@ -280,7 +507,7 @@ private struct RunningStage: View {
             if model.elevating {
                 // Root-owned app handed to mo — it does its own ~40s leftover
                 // scan, no parseable progress, so the bar is indeterminate.
-                Text("正在通过管理员权限删除…（约 40 秒）")
+                Text("正在通过管理员权限删除…")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(Palette.fg)
                 ProgressView()
@@ -354,7 +581,7 @@ private struct DoneStage: View {
                     // The app is root-owned — FDA can't help. Hand it to mo,
                     // which elevates through its own Touch ID + sudoers rule;
                     // keep the manual command as a fallback.
-                    SecondaryButton(title: model.elevating ? "正在删除…（约 40 秒）" : "用管理员权限删除") {
+                    SecondaryButton(title: model.elevating ? "正在删除…" : "用管理员权限删除") {
                         elevate()
                     }
                     .disabled(model.elevating)

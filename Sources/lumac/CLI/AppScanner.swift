@@ -59,17 +59,17 @@ enum AppScanner {
         var preview = UninstallPreview()
         var seen = Set<String>()
 
-        func add(_ path: String, reviewOnly: Bool) {
+        // `reviewOnly` is no longer a caller decision: whether lumac can remove
+        // a path is decided by the Trash guard, inside `UninstallLeftover.make`.
+        func add(_ path: String) {
             let std = (path as NSString).standardizingPath
             guard seen.insert(std).inserted, fm.fileExists(atPath: std) else { return }
-            preview.leftovers.append(UninstallLeftover(
-                path: std,
-                bytes: Trash.directorySize(std),
-                reviewOnly: reviewOnly))
+            preview.leftovers.append(UninstallLeftover.make(
+                path: std, bytes: Trash.directorySize(std), bundleId: bid))
         }
 
         // The app bundle itself.
-        add(app.path, reviewOnly: false)
+        add(app.path)
 
         // User-space locations addressed exactly by bundle id or app name.
         let userExact = [
@@ -86,15 +86,38 @@ enum AppScanner {
             "\(home)/Library/Logs/\(bid)",
             "\(home)/Library/Logs/\(name)",
         ]
-        userExact.forEach { add($0, reviewOnly: false) }
+        userExact.forEach { add($0) }
 
-        // Locations that embed the bundle id in their child names.
+        // Locations to scan by child name rather than by an exact path.
+        //
+        // An exact `<dir>/<bid>` lookup misses every sibling that extends the
+        // bundle id: fuse-t installs both `Containers/org.fuset.fskit-srv` and
+        // `Containers/org.fuset.fskit-srv.module`, and only the first was found
+        // while Containers was on the exact list. Preferences holds the same
+        // shape (`<bid>.plist`, `<bid>.ShipIt.<uuid>.plist` under ByHost), so
+        // every one of these is walked with the boundary matcher instead.
         let userPrefixed = [
+            "\(home)/Library/Containers",
             "\(home)/Library/Group Containers",
             "\(home)/Library/Application Scripts",
+            "\(home)/Library/Application Support",
+            "\(home)/Library/Caches",
+            "\(home)/Library/HTTPStorages",
+            "\(home)/Library/WebKit",
+            "\(home)/Library/Preferences",
+            "\(home)/Library/Preferences/ByHost",
+            "\(home)/Library/Saved Application State",
+            "\(home)/Library/Logs",
         ]
         for base in userPrefixed {
-            for child in children(of: base, containing: bid) { add(child, reviewOnly: false) }
+            for child in children(of: base, matching: bid) { add(child) }
+        }
+
+        // CrashReporter files are named after the *app*, not the bundle id
+        // ("Claude_<uuid>.plist"), so they need their own rule.
+        let crashReporter = "\(home)/Library/Application Support/CrashReporter"
+        for child in children(of: crashReporter, prefixedBy: name + "_") {
+            add(child)
         }
 
         // Privileged /Library items: shown for transparency, but flagged as
@@ -105,9 +128,9 @@ enum AppScanner {
             "/Library/LaunchAgents/\(bid).plist",
             "/Library/PrivilegedHelperTools/\(bid)",
         ]
-        sysExact.forEach { add($0, reviewOnly: true) }
+        sysExact.forEach { add($0) }
         for base in ["/Library/LaunchDaemons", "/Library/LaunchAgents", "/Library/PrivilegedHelperTools"] {
-            for child in children(of: base, containing: bid) { add(child, reviewOnly: true) }
+            for child in children(of: base, matching: bid) { add(child) }
         }
 
         // Biggest first (the bundle usually leads).
@@ -115,8 +138,26 @@ enum AppScanner {
         return preview
     }
 
-    private static func children(of dir: String, containing needle: String) -> [String] {
+    /// Children of `dir` whose name carries `bundleId` as a whole reverse-DNS
+    /// component run — `com.foo`, `group.com.foo`, `group.com.foo.shared`,
+    /// `com.foo.helper`. A plain `contains` also matched `group.com.foobar.*`,
+    /// which belongs to a different app and would have been trashed with it.
+    private static func children(of dir: String, matching bundleId: String) -> [String] {
         guard let entries = try? FileManager.default.contentsOfDirectory(atPath: dir) else { return [] }
-        return entries.filter { $0.contains(needle) }.map { dir + "/" + $0 }
+        return entries
+            .filter { name in
+                name == bundleId
+                    || name.hasPrefix(bundleId + ".")
+                    || name.hasSuffix("." + bundleId)
+                    || name.contains("." + bundleId + ".")
+            }
+            .map { dir + "/" + $0 }
+    }
+
+    /// Children whose name starts with `prefix` — for the few locations that key
+    /// off the app's name instead of its bundle id.
+    private static func children(of dir: String, prefixedBy prefix: String) -> [String] {
+        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: dir) else { return [] }
+        return entries.filter { $0.hasPrefix(prefix) }.map { dir + "/" + $0 }
     }
 }

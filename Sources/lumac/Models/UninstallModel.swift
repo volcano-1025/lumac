@@ -34,10 +34,41 @@ final class UninstallModel {
     var query = ""
     var sort: SortKey = .size
 
+    /// Where the leftover list on screen came from.
+    ///
+    /// Ownership is knowledge, not data — mole carries ~3000 lines of it, so mo
+    /// gets the final word. The native scan is the instant first draft (and the
+    /// fallback), and this says which of the two the user is looking at.
+    enum PreviewSource: Equatable {
+        case native                 // AppScanner's draft, mo hasn't answered yet
+        case verified               // replaced by mo's own list
+        case unavailable(String)    // mo couldn't answer; the draft stands
+    }
+
     // Preview
     var selected: InstalledApp?
     var preview: UninstallPreview?
     var previewLoading = false
+    var previewSource: PreviewSource = .native
+    /// True while `mo uninstall --dry-run` is re-deriving the list. The trash
+    /// button stays disabled throughout: acting on the draft would be acting on
+    /// the list lumac already knows is the less trustworthy of the two.
+    var verifying = false
+    /// Stage reported by mo's own output, and a 0...1 bar. mo prints markers at
+    /// the start and the end of its leftover scan but nothing in between, so the
+    /// middle is filled from elapsed time against `Self.expectedScanSeconds`.
+    var verifyPhase: MoScanPhase?
+    var verifyProgress: Double = 0
+    /// Measured on this machine: banner 0.2s, match 2.5s, list 25.6s. The run
+    /// used to continue to 46s; the preview now stops as soon as the list lands.
+    static let expectedScanSeconds: Double = 28
+
+    /// An uninstaller the app shipped with itself, when there is one.
+    var vendorUninstaller: VendorUninstaller?
+
+    private var ticker: Task<Void, Never>?
+    /// Bumped by every `select`, so a superseded run can tell it is stale.
+    private var generation = 0
 
     // Run
     var progress: Double = 0
@@ -89,37 +120,150 @@ final class UninstallModel {
 
     func select(_ app: InstalledApp) {
         task?.cancel()
+        ticker?.cancel()
         selected = app
         preview = nil
         previewLoading = true
+        previewSource = .native
+        verifying = false
+        verifyPhase = nil
+        verifyProgress = 0
+        vendorUninstaller = nil
         outcome = nil
         stage = .preview
+        // A cancelled run's `defer` fires asynchronously — possibly after the
+        // next app's run has already started — so it must not write state that
+        // no longer belongs to it.
+        generation &+= 1
+        let generation = self.generation
+        let model = self
         task = Task {
-            let preview = await Task.detached { AppScanner.leftovers(for: app) }.value
+            // Native first so the page has something immediately — AppScanner
+            // returns in milliseconds where mo rescans the disk for ~26s.
+            let draft = await Task.detached { AppScanner.leftovers(for: app) }.value
             guard !Task.isCancelled else { return }
-            self.preview = preview
+            self.preview = draft
             self.previewLoading = false
+            self.vendorUninstaller = await Task.detached {
+                VendorUninstallerScanner.find(for: app)
+            }.value
+
+            // Then let mo re-derive it. Its answer replaces the draft: the
+            // native sweep matches on bundle id and display name, which is the
+            // mis-attribution mole's protection rules exist to prevent.
+            self.verifying = true
+            self.startTicker()
+            defer {
+                if model.generation == generation {
+                    model.verifying = false
+                    model.ticker?.cancel()
+                    model.verifyProgress = 1
+                }
+            }
+
+            // mo matches on the on-disk bundle name, not a localized one.
+            let name = (app.path as NSString).lastPathComponent
+                .replacingOccurrences(of: ".app", with: "")
+            do {
+                let output = try await MoCLI.shared.uninstallPreview(named: name) { phase in
+                    // A local reference, not `[weak self]`: the enclosing task
+                    // already holds the model for the whole call, so weak buys
+                    // nothing and only makes the two captures disagree.
+                    Task { @MainActor in model.advance(to: phase) }
+                }
+                guard !Task.isCancelled else { return }
+                if let verified = UninstallPreviewParser.parse(
+                    output, expecting: app.path, bundleId: app.bundleId) {
+                    self.preview = verified
+                    self.previewSource = .verified
+                } else {
+                    // A fuzzy name can match several apps; rather than show one
+                    // app's files under another's header, keep the draft.
+                    self.previewSource = .unavailable("mo 没能唯一匹配到这个应用")
+                }
+            } catch is CancellationError {
+                return  // the user moved on; nothing to report
+            } catch CLIError.notInstalled {
+                guard !Task.isCancelled else { return }
+                self.previewSource = .unavailable("没有检测到 mo")
+            } catch CLIError.timedOut {
+                guard !Task.isCancelled else { return }
+                self.previewSource = .unavailable("mo 复核超时")
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.previewSource = .unavailable("mo 复核失败")
+            }
         }
+    }
+
+    /// Fills the silent stretch of mo's scan from elapsed time. mo emits no
+    /// progress of its own between "Matched" and "Files to be removed", so the
+    /// bar creeps toward 0.92 and the stage markers set the floor under it —
+    /// never running past what has actually been observed.
+    private func startTicker() {
+        let started = Date()
+        ticker = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(400))
+                guard !Task.isCancelled, let self, self.verifying else { return }
+                let elapsed = Date().timeIntervalSince(started)
+                let timed = min(0.92, elapsed / Self.expectedScanSeconds)
+                self.verifyProgress = max(self.verifyPhase?.floor ?? 0, timed)
+            }
+        }
+    }
+
+    private func advance(to phase: MoScanPhase) {
+        verifyPhase = phase
+        verifyProgress = max(verifyProgress, phase.floor)
     }
 
     func backToList() {
         task?.cancel()
+        ticker?.cancel()
         stage = .list
         selected = nil
         preview = nil
     }
 
+    // MARK: - Selection
+
+    /// Flips one row. Locked rows have no checkbox, so they are never reachable.
+    func toggle(_ item: UninstallLeftover) {
+        guard !item.locked,
+              let i = preview?.leftovers.firstIndex(where: { $0.id == item.id }) else { return }
+        preview?.leftovers[i].selected.toggle()
+    }
+
+    /// Ticks or unticks a whole section, skipping the rows that have no checkbox.
+    func setTier(_ tier: LeftoverTier, _ on: Bool) {
+        guard preview != nil else { return }
+        for i in preview!.leftovers.indices where preview!.leftovers[i].tier == tier {
+            preview!.leftovers[i].selected = on
+        }
+    }
+
+    func allSelected(in tier: LeftoverTier) -> Bool {
+        guard let rows = preview?.leftovers.filter({ $0.tier == tier }), !rows.isEmpty
+        else { return false }
+        return rows.allSatisfy(\.selected)
+    }
+
+    /// mo's list supersedes the draft, so acting before it lands would be
+    /// acting on the list lumac itself considers less reliable.
+    var canExecute: Bool { !verifying && !(preview?.selectedItems.isEmpty ?? true) }
+
     // MARK: - Execute
 
-    /// Moves the app bundle and its user-space leftovers to the Trash. Privileged
-    /// `/Library` items are left for a future authorized flow.
+    /// Trashes exactly the ticked rows. Locked items — `/Library`, installer
+    /// receipts, anything the Trash guard refuses — are never included.
     func execute() {
-        guard let preview, !preview.trashable.isEmpty else { return }
+        guard let preview, !preview.selectedItems.isEmpty else { return }
         task?.cancel()
         stage = .running
         progress = 0
 
-        let paths = preview.trashable.map(\.path)
+        let paths = preview.selectedItems.map(\.path)
 
         task = Task {
             let outcome = await Trash.run(paths: paths) { fraction, _ in
@@ -151,7 +295,8 @@ final class UninstallModel {
                 HistoryStore.shared.add(command: "uninstall",
                                         freedBytes: outcome.freedBytes,
                                         itemCount: outcome.trashed.count,
-                                        note: self.selected?.name)
+                                        note: self.selected?.name,
+                                        moves: outcome.moves)
                 // The app is gone from disk; drop it from the list so returning
                 // to the grid reflects reality without a full rescan.
                 if let selected = self.selected {
@@ -172,6 +317,7 @@ final class UninstallModel {
 
     func reset() {
         task?.cancel()
+        ticker?.cancel()
         stage = .list
         selected = nil
         preview = nil
@@ -202,14 +348,16 @@ final class UninstallModel {
             return error.localizedDescription
         }
 
-        // mo returns 0 even when it matched nothing, so confirm from the text.
-        let removed = output.localizedCaseInsensitiveContains("Uninstall complete")
-            || output.localizedCaseInsensitiveContains("Removed 1 app")
-            || output.localizedCaseInsensitiveContains("Removed")
-        let matchedNone = output.localizedCaseInsensitiveContains("No matching")
-            || output.localizedCaseInsensitiveContains("No application found")
-        guard removed, !matchedNone else {
-            return "mo 未能完成卸载。可改用「复制命令」在终端手动删除。"
+        // Ground truth is the bundle, not the wording. mo exits 0 whether it
+        // removed the app, was declined at either confirmation, or was refused
+        // admin rights, and it titles the summary "Uninstall complete" even when
+        // `success_count == 0` — which the old substring check read as success.
+        // So: the app is gone iff its bundle is gone. `MoUninstallReport` is
+        // only consulted to say *why* it is still there.
+        let report = MoUninstallReport.parse(output)
+        guard !FileManager.default.fileExists(atPath: selected.path) else {
+            let why = report.message ?? "mo 报告已删除，但应用仍在原处。"
+            return why + "可改用「复制命令」在终端手动删除。"
         }
 
         var totalFreed = selected.bytes
@@ -222,10 +370,13 @@ final class UninstallModel {
             totalFreed = updated.freedBytes
             outcome = updated
         }
+        // Only the user-space leftovers lumac trashed itself are reversible;
+        // the bundle went through mo, which does not report where it landed.
         HistoryStore.shared.add(command: "uninstall",
                                 freedBytes: totalFreed,
                                 itemCount: 1,
-                                note: selected.name)
+                                note: selected.name,
+                                moves: outcome?.moves ?? [])
         apps.removeAll { $0.id == selected.id }
         return nil
     }
