@@ -112,7 +112,14 @@ private struct EntryList: View {
     var body: some View {
         Card(padding: 0) {
             if model.rows.isEmpty {
-                Text(model.mode == .files ? "这个位置没有单独的大文件" : "这个位置是空的")
+                // At the overview root, `mo analyze` returns only directory
+                // rollups (no standalone files), so 大文件 is legitimately empty
+                // there — point the user at drilling in rather than implying the
+                // whole Mac has no large files.
+                Text(model.mode == .files
+                     ? (model.atRoot ? "顶层只有目录汇总，进入某个目录后可查看其中的大文件"
+                                     : "这个位置没有单独的大文件")
+                     : "这个位置是空的")
                     .font(Typo.body)
                     .foregroundStyle(Palette.fg(0.58))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

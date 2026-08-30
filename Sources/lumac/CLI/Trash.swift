@@ -151,9 +151,36 @@ enum Trash {
 
     static var trashPath: String { NSHomeDirectory() + "/.Trash" }
 
-    /// Bytes currently sitting in the Trash. Slow for a large Trash, so callers
-    /// run it off the main actor.
-    static func trashSize() -> Int64 { directorySize(trashPath) }
+    /// Every Trash directory Finder folds into the single "废纸篓" it shows, so
+    /// that emptying here matches Finder's Empty Trash instead of only wiping the
+    /// local home Trash (the bug that left an iCloud-deleted file behind):
+    ///  - `~/.Trash` — local home
+    ///  - `~/Library/Mobile Documents/.Trash` — iCloud Drive (removes cross-device)
+    ///  - `/Volumes/<external>/.Trashes/<uid>` — other mounted volumes
+    /// Only paths that actually exist are returned.
+    static func trashRoots() -> [String] {
+        let fm = FileManager.default
+        var roots = [trashPath, NSHomeDirectory() + "/Library/Mobile Documents/.Trash"]
+        let uid = getuid()
+        if let volumes = try? fm.contentsOfDirectory(atPath: "/Volumes") {
+            for volume in volumes {
+                let base = "/Volumes/" + volume
+                // `/Volumes/Macintosh HD` is a symlink back to the boot volume,
+                // whose Trash is already `~/.Trash`; skip it (and any symlink) so
+                // only genuine external mounts add a per-volume `.Trashes`.
+                let attrs = try? fm.attributesOfItem(atPath: base)
+                if (attrs?[.type] as? FileAttributeType) == .typeSymbolicLink { continue }
+                roots.append(base + "/.Trashes/\(uid)")
+            }
+        }
+        return roots.filter { fm.fileExists(atPath: $0) }
+    }
+
+    /// Bytes currently sitting across every Trash root. Slow for a large Trash,
+    /// so callers run it off the main actor.
+    static func trashSize() -> Int64 {
+        trashRoots().reduce(0) { $0 + directorySize($1) }
+    }
 
     struct EmptyResult {
         var removed = 0
@@ -162,21 +189,29 @@ enum Trash {
         var failed: [String] = []
     }
 
-    /// Permanently removes everything in the user's Trash — this is the one
-    /// deletion in the app that cannot be undone, so callers gate it behind an
-    /// explicit confirmation. Root-owned items (e.g. something moved in with
-    /// `sudo mv`) can't be removed without elevation and are reported by name
-    /// rather than silently skipped. Progress is a 0...1 fraction over the
-    /// top-level items, mirroring `run(paths:)`.
+    /// Permanently removes everything across every Trash root (`trashRoots()`:
+    /// local, iCloud Drive, external volumes) — matching Finder's Empty Trash.
+    /// This is the one deletion in the app that cannot be undone, so callers gate
+    /// it behind an explicit confirmation; the iCloud root removes cross-device.
+    /// Root-owned items (e.g. something moved in with `sudo mv`) can't be removed
+    /// without elevation and are reported by name rather than silently skipped.
+    /// Progress is a 0...1 fraction over the top-level items, mirroring `run(paths:)`.
     static func emptyTrash(
         progress: @MainActor @escaping (Double) -> Void = { _ in }
     ) async -> EmptyResult {
         var result = EmptyResult()
         let fileManager = FileManager.default
-        let url = URL(fileURLWithPath: trashPath)
-        guard let items = try? fileManager.contentsOfDirectory(
-            at: url, includingPropertiesForKeys: nil
-        ) else {
+        // Flatten every trash root's top-level items into one list, so progress
+        // is a single 0...1 sweep and one unreadable root doesn't abort the rest.
+        var items: [URL] = []
+        for root in trashRoots() {
+            if let entries = try? fileManager.contentsOfDirectory(
+                at: URL(fileURLWithPath: root), includingPropertiesForKeys: nil
+            ) {
+                items.append(contentsOf: entries)
+            }
+        }
+        guard !items.isEmpty else {
             await progress(1)
             return result
         }

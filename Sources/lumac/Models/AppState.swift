@@ -129,9 +129,11 @@ final class AppState {
 
     var screen: Screen = .status
 
-    /// Drives the "检查更新" alert raised from the brand menu. There is no real
-    /// update feed yet, so this only reports the running version.
-    var showingUpdateCheck = false
+    /// Drives the "检查更新" alert raised from the brand menu — a real check of
+    /// both lumac and mole (`checkNow()`), reporting each component's outcome.
+    var manualChecks: [UpdateChecker.Check] = []
+    var showingManualCheck = false
+    var checkingNow = false
 
     /// 设置 opens as a centered sheet rather than a left-aligned content page.
     var showingSettings = false
@@ -168,6 +170,24 @@ final class AppState {
                 self.moleUpdate = update
                 self.showingMoleUpdate = true
             }
+        }
+    }
+
+    /// A user-initiated check (brand menu "检查更新"). Unlike the silent launch
+    /// check, this always surfaces a result — up to date, updatable, missing, or
+    /// a network failure.
+    func checkNow() {
+        guard !checkingNow else { return }
+        checkingNow = true
+        Task {
+            let checks = await UpdateChecker.all()
+            self.checkingNow = false
+            // Remember a mole update so the alert's "用 Homebrew 更新" can act on it.
+            if let mole = checks.first(where: { $0.name == "mole" })?.update {
+                self.moleUpdate = mole
+            }
+            self.manualChecks = checks
+            self.showingManualCheck = true
         }
     }
 

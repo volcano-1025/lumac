@@ -25,10 +25,18 @@ struct RootView: View {
             app.startPolling()
             app.checkForUpdatesOnce()
         }
-        .alert("检查更新", isPresented: $app.showingUpdateCheck) {
-            Button("好") {}
+        .alert("检查更新", isPresented: $app.showingManualCheck) {
+            if app.manualChecks.contains(where: { $0.name == "mole" && $0.isUpdatable }), Brew.isInstalled {
+                Button("用 Homebrew 更新 mole") { app.updateMole() }
+            }
+            if app.manualChecks.contains(where: { $0.name == "lumac" && $0.isUpdatable }) {
+                Button("下载 lumac 新版") {
+                    if let url = URL(string: UpdateChecker.lumacReleasesURL) { NSWorkspace.shared.open(url) }
+                }
+            }
+            Button("好", role: .cancel) {}
         } message: {
-            Text("lumac \(LumacVersion.display) · 已经是最新版本。")
+            Text(app.manualChecks.map(\.line).joined(separator: "\n"))
         }
         .alert("mole 有新版本", isPresented: $app.showingMoleUpdate, presenting: app.moleUpdate) { update in
             if Brew.isInstalled {
@@ -124,7 +132,7 @@ private struct BrandButton: View {
                 Label("操作记录", systemImage: "clock.arrow.circlepath")
             }
             Divider()
-            Button { app.showingUpdateCheck = true } label: {
+            Button { app.checkNow() } label: {
                 Label("检查更新", systemImage: "arrow.down.circle")
             }
         } label: {
@@ -416,5 +424,7 @@ private struct WindowConfigurator: NSViewRepresentable {
 }
 
 enum LumacVersion {
-    static let display = "v0.1"
+    /// Bare version, e.g. "0.1" — compared against GitHub release tags.
+    static let number = "0.1"
+    static let display = "v" + number
 }

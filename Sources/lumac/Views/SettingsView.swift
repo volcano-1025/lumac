@@ -7,6 +7,11 @@ struct SettingsView: View {
     @Environment(AppState.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var moPath: String?
+    @State private var moVersion: String?
+    /// Inline result of the About group's "检查更新" — an alert can't present over
+    /// this sheet, so both components' outcomes are shown right in the row.
+    @State private var checks: [UpdateChecker.Check] = []
+    @State private var checking = false
 
     var body: some View {
         @Bindable var app = app
@@ -94,7 +99,7 @@ struct SettingsView: View {
                     Hairline()
                     SettingRow(label: "mo 命令行",
                                detail: moPath ?? "把 mo 装到 PATH 上即可启用清理功能") {
-                        Badge(text: moPath == nil ? "未检测到" : "已安装",
+                        Badge(text: moPath == nil ? "未检测到" : (moVersion.map { "v\($0)" } ?? "已安装"),
                               tint: moPath == nil ? Palette.danger : Palette.accentText,
                               fill: moPath == nil ? Palette.danger.opacity(0.10) : Palette.accentSoft)
                     }
@@ -103,8 +108,8 @@ struct SettingsView: View {
                         SecondaryButton(title: "打开废纸篓") { Trash.openTrash() }
                     }
                     Hairline()
-                    SettingRow(label: "检查更新") {
-                        SecondaryButton(title: "检查") { app.showingUpdateCheck = true }
+                    SettingRow(label: "检查更新", detail: updateDetail) {
+                        updateTrailing
                     }
                 }
             }
@@ -118,6 +123,57 @@ struct SettingsView: View {
             app.refreshFDA()
             app.configModel.loadIfNeeded()
             moPath = await MoCLI.shared.installedPath()
+            moVersion = await MoCLI.shared.version()
+        }
+    }
+
+    // MARK: - Update check (inline, since an alert can't cover this sheet)
+
+    private var updateDetail: String {
+        if checking { return "正在检查 lumac 与 mole 的更新…" }
+        if checks.isEmpty { return "对比 GitHub 上 lumac 与 mole 的最新发布版本" }
+        return checks.map(\.line).joined(separator: "\n")
+    }
+
+    private var moleUpdate: UpdateChecker.Update? {
+        checks.first { $0.name == "mole" }?.update
+    }
+    private var lumacUpdatable: Bool {
+        checks.contains { $0.name == "lumac" && $0.isUpdatable }
+    }
+
+    @ViewBuilder private var updateTrailing: some View {
+        if checking {
+            ProgressView().controlSize(.small)
+        } else if let update = moleUpdate, Brew.isInstalled {
+            SecondaryButton(title: "更新 mole") { upgradeMole(update) }
+        } else if lumacUpdatable {
+            SecondaryButton(title: "下载 lumac") {
+                if let url = URL(string: UpdateChecker.lumacReleasesURL) { NSWorkspace.shared.open(url) }
+            }
+        } else {
+            SecondaryButton(title: "检查") { runCheck() }
+        }
+    }
+
+    private func runCheck() {
+        checking = true
+        Task {
+            let result = await UpdateChecker.all()
+            if let mole = result.first(where: { $0.name == "mole" })?.update { app.moleUpdate = mole }
+            checks = result
+            checking = false
+        }
+    }
+
+    private func upgradeMole(_ update: UpdateChecker.Update) {
+        checking = true
+        Task {
+            _ = await Brew.upgrade(BrewUpdate(name: "mole", kind: .formula,
+                                              current: update.current, latest: update.latest))
+            checks = await UpdateChecker.all()
+            moVersion = await MoCLI.shared.version()
+            checking = false
         }
     }
 

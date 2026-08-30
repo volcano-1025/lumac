@@ -4,6 +4,8 @@ enum CLIError: LocalizedError {
     case notInstalled
     case failed(command: String, status: Int32, output: String)
     case badOutput(String)
+    /// A child process was killed after exceeding its time budget (see Brew.run).
+    case timedOut(command: String)
 
     var errorDescription: String? {
         switch self {
@@ -13,6 +15,8 @@ enum CLIError: LocalizedError {
             return "mo \(command) 执行失败（\(status)）\n\(output.prefix(400))"
         case .badOutput(let detail):
             return "无法解析 mo 的输出：\(detail)"
+        case .timedOut(let command):
+            return "\(command) 超时：网络太慢或无响应，请稍后重试"
         }
     }
 }

@@ -35,7 +35,9 @@ enum Brew {
 
     /// `brew outdated --json=v2` → casks first (the apps), then formulae.
     static func outdated() async throws -> [BrewUpdate] {
-        let output = try await run(["outdated", "--json=v2"])
+        // Metadata-only: with the mirror this returns in ~2s, so a tight cap
+        // turns a wedged network into a clear error instead of an endless spinner.
+        let output = try await run(["outdated", "--json=v2"], timeout: 60)
         guard let data = output.data(using: .utf8), !data.isEmpty else { return [] }
 
         struct Entry: Decodable {
@@ -89,12 +91,35 @@ enum Brew {
         var args = ["upgrade"]
         if item.kind == .cask { args.append("--cask") }
         args.append(item.name)
-        return (try? await run(args)) != nil
+        // An upgrade downloads and installs a bottle/app, so it needs a much
+        // larger budget than the metadata check — big casks can take a while.
+        return (try? await run(args, timeout: 1800)) != nil
     }
 
-    /// Runs `brew` and returns stdout, throwing on a non-zero exit.
+    /// A fast Homebrew mirror. A GUI app launched from Finder/menubar doesn't
+    /// inherit the user's shell, so brew defaults to the official API domain
+    /// (formulae.brew.sh) — whose 16 MB index download stalls for minutes on a
+    /// throttled network and hangs the whole update flow. Routing through a
+    /// mirror makes the same fetch ~2s. Only applied when the user hasn't set
+    /// their own (e.g. via `launchctl setenv HOMEBREW_API_DOMAIN …`).
+    private static let mirrorAPIDomain = "https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles/api"
+    private static let mirrorBottleDomain = "https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles"
+
+    /// Thread-safe one-shot flag: set by the timeout killer, read after the
+    /// process exits to distinguish a kill-on-timeout from an ordinary failure.
+    private final class Flag: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = false
+        func set() { lock.lock(); value = true; lock.unlock() }
+        var isSet: Bool { lock.lock(); defer { lock.unlock() }; return value }
+    }
+
+    /// Runs `brew` and returns stdout, throwing on a non-zero exit. `timeout`
+    /// caps the wall-clock wait: on expiry the process and its curl children are
+    /// killed so the pipe reads unblock and we throw `.timedOut` instead of
+    /// spinning forever.
     @discardableResult
-    private static func run(_ args: [String]) async throws -> String {
+    private static func run(_ args: [String], timeout: TimeInterval) async throws -> String {
         guard let path else { throw CLIError.notInstalled }
         return try await withCheckedThrowingContinuation { continuation in
             let process = Process()
@@ -105,6 +130,8 @@ enum Brew {
             var env = ProcessInfo.processInfo.environment
             env["HOMEBREW_NO_AUTO_UPDATE"] = "1"
             env["HOMEBREW_NO_COLOR"] = "1"
+            if env["HOMEBREW_API_DOMAIN"] == nil { env["HOMEBREW_API_DOMAIN"] = mirrorAPIDomain }
+            if env["HOMEBREW_BOTTLE_DOMAIN"] == nil { env["HOMEBREW_BOTTLE_DOMAIN"] = mirrorBottleDomain }
             process.environment = env
 
             let out = Pipe()
@@ -114,6 +141,23 @@ enum Brew {
             do { try process.run() } catch {
                 continuation.resume(throwing: error); return
             }
+
+            // Backstop against a wedged brew (e.g. a network fetch that slips
+            // past the mirror). pkill the curl children *first* — while they're
+            // still parented to brew — so killing brew doesn't reparent them to
+            // launchd and leave a pipe writer open, keeping our read blocked.
+            let didTimeout = Flag()
+            let pid = process.processIdentifier
+            let killer = DispatchWorkItem {
+                didTimeout.set()
+                let pk = Process()
+                pk.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+                pk.arguments = ["-9", "-P", "\(pid)"]
+                try? pk.run(); pk.waitUntilExit()
+                kill(pid, SIGKILL)
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: killer)
+
             // Drain both pipes concurrently — `brew upgrade` is verbose on both,
             // and reading them one at a time deadlocks when the unread pipe's
             // 64 KB buffer fills before the one being read reaches EOF.
@@ -128,7 +172,12 @@ enum Brew {
             let outData = out.fileHandleForReading.readDataToEndOfFile()
             group.wait()
             process.waitUntilExit()
-            if process.terminationStatus != 0 {
+            killer.cancel()
+
+            if didTimeout.isSet {
+                continuation.resume(throwing: CLIError.timedOut(
+                    command: "brew " + args.joined(separator: " ")))
+            } else if process.terminationStatus != 0 {
                 let msg = String(data: errData, encoding: .utf8) ?? ""
                 continuation.resume(throwing: CLIError.failed(
                     command: "brew " + args.joined(separator: " "),
