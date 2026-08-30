@@ -174,10 +174,16 @@ struct PathDump {
 }
 
 /// Byte-size formatting and parsing.
+///
+/// Decimal units throughout (1 MB = 1,000,000 bytes), because every other party
+/// in this app's world uses them: Finder has since 10.6, and mole's
+/// `bytes_to_human` (`lib/core/base.sh:749`) divides by 10^9 / 10^6 / 10^3.
+/// Reading mo's "1.65GB" with a binary scale overstated it by 7.4% — and that
+/// figure is what the cleanup page prints as 可释放.
 enum Size {
     private static let units: [(String, Double)] = [
-        ("TB", 1_099_511_627_776), ("GB", 1_073_741_824),
-        ("MB", 1_048_576), ("KB", 1024), ("B", 1),
+        ("TB", 1_000_000_000_000), ("GB", 1_000_000_000),
+        ("MB", 1_000_000), ("KB", 1_000), ("B", 1),
     ]
 
     /// Finds the first size literal in a string ("471.1MB", "0B", "1.63GB").
@@ -197,11 +203,14 @@ enum Size {
     /// Display form used across the UI.
     static func format(_ bytes: Int64) -> String {
         if bytes <= 0 { return "—" }
-        let gb = Double(bytes) / 1_073_741_824
+        let gb = Double(bytes) / 1_000_000_000
         if gb >= 1 { return String(format: "%.1f GB", gb) }
-        let mb = Double(bytes) / 1_048_576
-        if mb >= 1 { return "\(Int(mb.rounded())) MB" }
-        return "\(max(1, Int((Double(bytes) / 1024).rounded()))) KB"
+        // One decimal, like the GB branch. Rounding MB to a whole number
+        // reported a 1.71 MB bundle as "2 MB" — a 17% overstatement on exactly
+        // the figure the user is deciding against.
+        let mb = Double(bytes) / 1_000_000
+        if mb >= 1 { return String(format: "%.1f MB", mb) }
+        return "\(max(1, Int((Double(bytes) / 1000).rounded()))) KB"
     }
 }
 

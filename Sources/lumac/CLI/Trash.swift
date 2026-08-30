@@ -10,10 +10,70 @@ import AppKit
 /// can be put back from the Trash.
 enum Trash {
 
+    /// Where one item went, so the move can be reversed later.
+    ///
+    /// `trashItem` already hands back the resulting URL — the Trash renames on
+    /// collision, so the original path alone is not enough to find it again.
+    /// That return value used to be discarded, which is why nothing before this
+    /// could be undone.
+    struct Move: Codable, Hashable {
+        var from: String
+        var to: String
+    }
+
     struct Outcome {
         var freedBytes: Int64 = 0
         var trashed: [String] = []
+        /// Reversible moves, in the order they happened.
+        var moves: [Move] = []
         var failed: [(path: String, reason: String)] = []
+    }
+
+    struct RestoreResult {
+        var restored: [String] = []
+        var failed: [(path: String, reason: String)] = []
+        var restoredBytes: Int64 = 0
+    }
+
+    /// Puts trashed items back where they came from.
+    ///
+    /// Refuses rather than overwrites: if something already occupies the
+    /// original path, that item is reported and left in the Trash. Missing
+    /// parents are recreated, since cleaning may have taken the whole directory.
+    static func restore(
+        _ moves: [Move],
+        progress: @MainActor @escaping (Double) -> Void = { _ in }
+    ) async -> RestoreResult {
+        var result = RestoreResult()
+        let fm = FileManager.default
+        guard !moves.isEmpty else { await progress(1); return result }
+
+        for (index, move) in moves.enumerated() {
+            await progress(Double(index) / Double(moves.count))
+
+            guard fm.fileExists(atPath: move.to) else {
+                result.failed.append((move.from, "已经不在废纸篓里了（可能已清空）"))
+                continue
+            }
+            guard !fm.fileExists(atPath: move.from) else {
+                result.failed.append((move.from, "原位置已有同名文件，没有覆盖"))
+                continue
+            }
+
+            let parent = (move.from as NSString).deletingLastPathComponent
+            try? fm.createDirectory(atPath: parent, withIntermediateDirectories: true)
+
+            let size = directorySize(move.to)
+            do {
+                try fm.moveItem(atPath: move.to, toPath: move.from)
+                result.restored.append(move.from)
+                result.restoredBytes += size
+            } catch {
+                result.failed.append((move.from, error.localizedDescription))
+            }
+        }
+        await progress(1)
+        return result
     }
 
     /// Paths that must never be trashed, whatever the scan reported.
@@ -44,6 +104,9 @@ enum Trash {
         guard clean.hasPrefix("/"), !clean.contains(".."), clean.count > 1 else { return false }
         guard !forbiddenRoots.contains(clean) else { return false }
         guard !protectedDirectories.contains(clean) else { return false }
+        // The semantic guard. The rules below only judge a path's shape, which
+        // says nothing about whether its contents can ever be recovered.
+        guard !Protected.covers(clean) else { return false }
 
         // Require at least three components, so "/Library" or "/Users/name"
         // can never slip through as a target. A top-level application bundle is
@@ -89,7 +152,9 @@ enum Trash {
             await progress(fraction, display)
 
             guard isDeletable(path) else {
-                outcome.failed.append((path, "路径不在允许清理的范围内"))
+                outcome.failed.append((path, Protected.covers(path)
+                    ? Protected.reason
+                    : "路径不在允许清理的范围内"))
                 continue
             }
             guard fileManager.fileExists(atPath: path) else { continue }
@@ -103,6 +168,10 @@ enum Trash {
                 try fileManager.trashItem(at: URL(fileURLWithPath: path), resultingItemURL: &resulting)
                 outcome.freedBytes += size
                 outcome.trashed.append(path)
+                // Only a move we can name both ends of is reversible.
+                if let landed = resulting?.path {
+                    outcome.moves.append(Move(from: path, to: landed))
+                }
             } catch {
                 outcome.failed.append((path, error.localizedDescription))
             }
@@ -124,10 +193,13 @@ enum Trash {
         }
 
         var total: Int64 = 0
+        // No `.skipsHiddenFiles`: caches, containers and app bundles are full
+        // of dotfiles, and skipping them under-reported both the "可释放" figure
+        // and the size actually freed.
         guard let enumerator = FileManager.default.enumerator(
             at: url,
             includingPropertiesForKeys: Array(keys),
-            options: [.skipsHiddenFiles]
+            options: []
         ) else { return 0 }
 
         for case let child as URL in enumerator {
