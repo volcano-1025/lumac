@@ -1,5 +1,9 @@
 # Handoff: Mole UI（Mole CLI 的 macOS 图形界面）
 
+> **归档：这是 2026-08 实现之前的原始设计交付文档，保留作视觉与交互基线，不描述当前行为。**
+> 与现状已知的出入：实际的删除由 lumac 自己执行（`FileManager.trashItem`），mo 只负责扫描和 root 应用提权；
+> 「启动项」页已移除；「项目产物」已并入深度清理。当前实现以仓库根目录的 README.md 和 CLAUDE.md 为准。
+
 ## Overview
 Mole 是一个 macOS 命令行清理工具（`mo`，https://github.com/tw93/Mole），提供 clean / uninstall / purge / installer / optimize / analyze / status 等能力。本设计把它包装成一个 macOS 应用：图形界面负责扫描结果的呈现、勾选与确认，**实际操作仍然由 mole CLI 执行**。界面对用户完全隐藏命令行——不出现命令字符串、不出现终端输出。
 
