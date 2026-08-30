@@ -201,7 +201,7 @@ private struct TabSegment: View {
 // MARK: - Content layer
 
 /// Content layer — opaque enough to separate from the glass above it, with the
-/// slight translucency the handoff asks for so the wallpaper tints it.
+/// slight translucency that lets the wallpaper tint it.
 private struct ContentArea: View {
     @Environment(AppState.self) private var app
 

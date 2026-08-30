@@ -38,7 +38,7 @@ enum Screen: String, CaseIterable, Identifiable {
         }
     }
 
-    /// SF Symbols, per the handoff's icon mapping table.
+    /// SF Symbols, one per destination.
     var symbol: String {
         switch self {
         case .status:    return "gauge.medium"

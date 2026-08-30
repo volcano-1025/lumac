@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Hairline divider — 0.5px everywhere, per the handoff.
+/// Hairline divider — 0.5px everywhere.
 struct Hairline: View {
     var vertical = false
     var body: some View {

@@ -30,7 +30,7 @@ enum FullDiskAccess {
 
 /// Touch ID (or the login password as fallback) as a confirmation gate before
 /// destructive actions. This does not grant elevated rights — it only asks the
-/// device owner to prove presence, matching the handoff's Settings "Touch ID".
+/// device owner to prove presence — the Settings "Touch ID" switch.
 enum Biometric {
     /// Whether the device can evaluate owner authentication at all.
     static var available: Bool {

@@ -1,7 +1,11 @@
 import SwiftUI
 import AppKit
 
-/// Design tokens transcribed 1:1 from the handoff README.
+/// The design system, and now its only home: every value below was
+/// transcribed from the original design handoff, which has since been
+/// removed (it described pages that no longer exist and a data flow the app
+/// does not use). Recover it from git if the visual reference is ever needed:
+/// `git show 9a0ad1e:design_handoff_mole_ui/README.md`.
 /// Colors are dynamic (NSColor providers) so light/dark switch without view churn.
 
 private func dyn(_ light: NSColor, _ dark: NSColor) -> Color {
@@ -86,7 +90,7 @@ enum Typo {
     static let aux = Font.system(size: 11)
     static let badge = Font.system(size: 10.5, weight: .medium)
 
-    /// Numerals and byte sizes use SF Mono, per the handoff (prototype used JetBrains Mono).
+    /// Numerals and byte sizes use SF Mono (the original prototype used JetBrains Mono).
     static func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
         .system(size: size, weight: weight, design: .monospaced)
     }
