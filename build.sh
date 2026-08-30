@@ -9,6 +9,19 @@ cd "$(dirname "$0")"
 CONFIG="${1:-debug}"
 APP="build/lumac.app"
 
+# Single source of truth for the version.
+#
+# It used to be typed here *and* in LumacVersion, which is what the in-app
+# update check compares against the GitHub release tag — so a drift between
+# the two would make the app misreport whether it is up to date. The Swift
+# constant wins; this reads it out.
+VERSION="$(sed -n 's/.*static let number = "\(.*\)".*/\1/p' \
+  Sources/lumac/Views/RootView.swift)"
+if [ -z "$VERSION" ]; then
+  echo "error: could not read LumacVersion.number from RootView.swift" >&2
+  exit 1
+fi
+
 # Pinned to the 26.5 SDK on purpose.
 #
 # In the 27.0 SDK, SwiftUI's @State is a macro backed by SwiftUIMacros, and the
@@ -63,8 +76,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleExecutable</key><string>lumac</string>
   <key>CFBundleIconFile</key><string>lumac</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.1</string>
-  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>CFBundleVersion</key><string>$VERSION</string>
   <key>LSMinimumSystemVersion</key><string>26.0</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSSupportsAutomaticTermination</key><false/>
@@ -93,4 +106,4 @@ else
   codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 fi
 
-echo "built $APP"
+echo "built $APP (v$VERSION)"
