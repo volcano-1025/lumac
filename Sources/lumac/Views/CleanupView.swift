@@ -157,7 +157,7 @@ private struct ReadyStage: View {
 
             HStack {
                 if !model.result.skipped.isEmpty {
-                    Text("\(model.result.skipped.count) 项因为无法访问被跳过")
+                    Text("\(model.result.skipped.count) 项被跳过 · 悬停查看原因")
                         .font(Typo.aux)
                         .foregroundStyle(Palette.fg(0.58))
                         .help(model.result.skipped.joined(separator: "\n"))
@@ -541,6 +541,16 @@ private struct EmptyStage: View {
                 Text("这台 Mac 目前很干净，过段时间再来看看。")
                     .font(Typo.body)
                     .foregroundStyle(Palette.fg(0.58))
+                // A scan can come back empty *because* everything it found was
+                // out of the trash guard's range (a project on an external
+                // volume, say). Without this the page claimed there was nothing
+                // to clean when there was.
+                if !model.result.skipped.isEmpty {
+                    Text("另有 \(model.result.skipped.count) 项被跳过 · 悬停查看原因")
+                        .font(Typo.aux)
+                        .foregroundStyle(Palette.fg(0.5))
+                        .help(model.result.skipped.joined(separator: "\n"))
+                }
                 // The Trash can still be full even when nothing is cleanable —
                 // e.g. right after a cleanup — so the empty action lives here too.
                 HStack(spacing: 10) {

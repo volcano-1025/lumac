@@ -121,7 +121,10 @@ struct SettingsView: View {
         .background(Palette.content)
         .task {
             app.refreshFDA()
-            app.configModel.loadIfNeeded()
+            // Re-read rather than load-once: `ensureTrashWhitelisted` (and mo
+            // itself) rewrite these files behind the app's back, and an edit
+            // made from a stale in-memory copy writes those entries back out.
+            app.configModel.reload()
             moPath = await MoCLI.shared.installedPath()
             moVersion = await MoCLI.shared.version()
         }

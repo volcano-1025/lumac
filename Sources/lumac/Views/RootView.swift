@@ -222,7 +222,7 @@ private struct ContentArea: View {
 
     @ViewBuilder
     private var screenBody: some View {
-        // 软件 owns three sub-screens reached from an in-page switcher, so it is
+        // 软件 owns several sub-screens reached from an in-page switcher, so it is
         // handled before the generic cleanup/placeholder routing.
         if TopTab.owning(app.screen) == .software {
             SoftwareSection()
@@ -245,7 +245,7 @@ private struct ContentArea: View {
 
 // MARK: - 软件 section
 
-/// The 软件 destination: a segmented switcher over 卸载 / 更新 / 启动项, with the
+/// The 软件 destination: a segmented switcher over 卸载 / 更新 / 项目产物, with the
 /// chosen sub-screen below it. The page header above already names the active
 /// sub-screen, so the switcher only has to move between them.
 private struct SoftwareSection: View {
@@ -267,12 +267,10 @@ private struct SoftwareSection: View {
 
     @ViewBuilder
     private var child: some View {
-        // 卸载应用 / 启动项 / 应用更新 have their own flows; 项目产物 (purge) uses
-        // the shared cleanup flow.
+        // 卸载应用 / 应用更新 have their own flows; 项目产物 (purge) uses the
+        // shared cleanup flow.
         if app.screen == .uninstall {
             UninstallView()
-        } else if app.screen == .login {
-            LoginView()
         } else if app.screen == .updates {
             UpdatesView()
         } else if let command = app.screen.cleanupCommand {
@@ -336,8 +334,6 @@ private struct SoftwareSwitcher: View {
             switch screen {
             case .uninstall: return "卸载"
             case .updates:   return "更新"
-            case .login:     return "启动项"
-            case .purge:     return "项目产物"
             default:         return screen.title
             }
         }

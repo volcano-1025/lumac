@@ -74,7 +74,16 @@ final class CleanupModel {
             // The CLI does not stream progress for a dry run, so the bar shows
             // indeterminate motion rather than a fake percentage.
             do {
-                let stdout = try await MoCLI.shared.run(command.dryRunArguments, allowFailure: true)
+                // 项目产物 rides along in this scan rather than owning a page.
+                // The two are independent processes and purge measures ~2.8s
+                // against clean's ~32s, so running them together costs nothing
+                // measurable — but only if they actually overlap, hence async let.
+                async let cleanOutput = MoCLI.shared.run(command.dryRunArguments,
+                                                         allowFailure: true)
+                async let purgeOutput = Self.purgeOutput(for: command)
+
+                let stdout = try await cleanOutput
+                let purge = await purgeOutput
                 guard !Task.isCancelled else { return }
 
                 let parsed: ScanResult
@@ -90,9 +99,12 @@ final class CleanupModel {
                     // 安装包清理 rides along in the 清理 page as one unchecked row,
                     // rather than living behind its own navigation entry.
                     clean.items.append(contentsOf: InstallerScanner.scan())
+                    if let purge {
+                        let projects = PurgeParser.categories(stdout: purge)
+                        clean.items.append(contentsOf: projects.items)
+                        clean.skipped.append(contentsOf: projects.skipped)
+                    }
                     parsed = clean
-                case .purgeStdout:
-                    parsed = PurgeParser.parse(stdout: stdout)
                 case .unsupported:
                     return  // Already handled above.
                 }
@@ -105,6 +117,15 @@ final class CleanupModel {
                 self.phase = .failed(error.localizedDescription)
             }
         }
+    }
+
+    /// `mo purge --dry-run`, for the 清理 scan to fold in. Returns nil when the
+    /// command has no project step, or when purge failed — a purge problem must
+    /// not take the whole cleanup scan down with it.
+    private static func purgeOutput(for command: CleanupCommand) async -> String? {
+        guard command == .clean else { return nil }
+        return try? await MoCLI.shared.run(CleanupCommand.purge.dryRunArguments,
+                                           allowFailure: true)
     }
 
     // MARK: - Selection
@@ -152,18 +173,23 @@ final class CleanupModel {
         progress = 0
 
         task = Task {
+            // No cancellation guard on the result: `Trash.run` stops at its own
+            // cancellation check and hands back what it did move. Discarding
+            // that made 取消 report "0 个位置 · —" while files really were in
+            // the Trash. `cancel()` already flipped the phase; setting it again
+            // is harmless.
             let outcome = await Trash.run(paths: paths) { fraction, path in
                 self.progress = fraction
                 self.currentPath = path
             }
-            guard !Task.isCancelled else { return }
             self.outcome = outcome
             self.phase = .done
             // Record what was actually freed — not the dry-run's "would free".
             if !outcome.trashed.isEmpty {
                 HistoryStore.shared.add(command: command.rawValue,
                                         freedBytes: outcome.freedBytes,
-                                        itemCount: outcome.trashed.count)
+                                        itemCount: outcome.trashed.count,
+                                        moves: outcome.moves)
             }
         }
     }
@@ -206,11 +232,11 @@ extension CleanupCommand {
     var idleDetail: String {
         switch self {
         case .clean:
-            return "会检查应用缓存、系统与应用日志、浏览器缓存、已卸载应用的残留，以及下载文件夹里的安装包。\n安装包默认不勾选；扫描不会改动任何东西，你可以逐项确认之后再清理。"
+            return "会检查应用缓存、系统与应用日志、浏览器缓存、已卸载应用的残留、下载文件夹里的安装包，以及项目里的构建产物。\n安装包和需要重新下载的依赖目录默认不勾选；扫描不会改动任何东西，你可以逐项确认之后再清理。"
         case .uninstall:
             return "会列出这台 Mac 上安装的应用，连同它们的启动项、偏好设置和隐藏残留一起移除。"
         case .purge:
-            return "会在你指定的目录里查找 node_modules、target、dist、venv 等构建产物。"
+            return "会在你指定的目录里查找 target、dist、DerivedData 等构建产物。"
         case .installer:
             return "会在下载文件夹、桌面、Homebrew 缓存和 iCloud 里查找用过的安装包。"
         case .optimize:

@@ -10,18 +10,16 @@ enum CleanupCommand: String, CaseIterable, Identifiable {
     ///
     /// * `.cleanDump` — `clean` writes `clean-list.txt`; that dump is the source
     ///   of paths, stdout only supplies grouping and risk.
-    /// * `.purgeStdout` — `purge` writes no dump but prints every artifact path
-    ///   to stdout, so stdout is parsed directly.
-    /// * `.unsupported` — `installer` drives an interactive TUI (and is folded
-    ///   into `clean` natively instead), while `uninstall` and `optimize` have
-    ///   their own dedicated screens rather than this trash-list flow.
-    enum ScanStrategy { case cleanDump, purgeStdout, unsupported }
+    /// * `.unsupported` — no page of its own. `installer` drives an interactive
+    ///   TUI and `purge` prints its whole answer to stdout; both are folded into
+    ///   the `clean` scan as extra categories instead. `uninstall` and
+    ///   `optimize` have their own dedicated screens.
+    enum ScanStrategy { case cleanDump, unsupported }
 
     var scanStrategy: ScanStrategy {
         switch self {
         case .clean: return .cleanDump
-        case .purge: return .purgeStdout
-        case .uninstall, .installer, .optimize: return .unsupported
+        case .purge, .uninstall, .installer, .optimize: return .unsupported
         }
     }
 

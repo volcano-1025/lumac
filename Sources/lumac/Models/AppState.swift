@@ -8,7 +8,7 @@ import AppKit
 /// 安装包清理 is not its own screen — it is folded into 深度清理 as one
 /// unchecked row, so it lives in `CleanupModel`, not here.
 enum Screen: String, CaseIterable, Identifiable {
-    case status, clean, uninstall, updates, login, purge, optimize, analyze, history, settings
+    case status, clean, uninstall, updates, optimize, analyze, history, settings
 
     var id: String { rawValue }
 
@@ -18,8 +18,6 @@ enum Screen: String, CaseIterable, Identifiable {
         case .clean:     return "深度清理"
         case .uninstall: return "卸载应用"
         case .updates:   return "应用更新"
-        case .login:     return "启动项"
-        case .purge:     return "项目产物"
         case .optimize:  return "系统优化"
         case .analyze:   return "磁盘分析"
         case .history:   return "操作记录"
@@ -30,11 +28,9 @@ enum Screen: String, CaseIterable, Identifiable {
     var subtitle: String {
         switch self {
         case .status:    return "这台 Mac 现在的状态 · 每 2 秒自动刷新"
-        case .clean:     return "缓存、日志、浏览器残留、下载的安装包与已卸载应用的遗留文件"
+        case .clean:     return "缓存、日志、浏览器残留、安装包、已卸载应用的遗留文件，以及项目构建产物"
         case .uninstall: return "连同启动项、偏好设置与隐藏残留一起移除"
         case .updates:   return "检查这台 Mac 上的应用有没有新版本，可直接在 lumac 内更新"
-        case .login:     return "开机自动启动的应用与后台服务"
-        case .purge:     return "清理项目里的 node_modules、target、dist 等构建产物"
         case .optimize:  return "重建系统数据库、刷新服务与索引，不删除个人文件"
         case .analyze:   return "看看空间都去哪了，删除的内容会移入废纸篓"
         case .history:   return "每一次清理都有记录，可以查看和还原"
@@ -49,8 +45,6 @@ enum Screen: String, CaseIterable, Identifiable {
         case .clean:     return "trash"
         case .uninstall: return "square.grid.2x2"
         case .updates:   return "arrow.down.circle"
-        case .login:     return "power"
-        case .purge:     return "folder.badge.gearshape"
         case .optimize:  return "slider.horizontal.3"
         case .analyze:   return "chart.pie"
         case .history:   return "clock.arrow.circlepath"
@@ -85,7 +79,7 @@ enum TopTab: String, CaseIterable, Identifiable {
         switch self {
         case .status:   return [.status]
         case .clean:    return [.clean]
-        case .software: return [.uninstall, .updates, .login, .purge]
+        case .software: return [.uninstall, .updates]
         case .optimize: return [.optimize]
         case .analyze:  return [.analyze]
         }
@@ -272,9 +266,6 @@ final class AppState {
 
     /// 系统优化 state, kept alive so the preview/result survives navigation.
     let optimizeModel = OptimizeModel()
-
-    /// 启动项 state, kept alive so the launchd list survives navigation.
-    let loginModel = LoginModel()
 
     /// 应用更新 state (Homebrew), kept alive so a check survives navigation.
     let updatesModel = UpdatesModel()
