@@ -5,14 +5,18 @@ struct StatusView: View {
     @Environment(AppState.self) private var app
 
     var body: some View {
-        if app.cliMissing {
-            CLIMissingView()
-        } else if app.status == nil {
+        if app.status == nil {
             ProgressView()
                 .controlSize(.small)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             VStack(spacing: 12) {
+                // CPU / 内存 / 磁盘 / 网络 / GPU and the app list are all read
+                // natively, so a missing `mo` only costs the CLI-only fields
+                // (health score, machine info, battery, bluetooth, uptime).
+                // Replacing the entire page over that hid metrics that work —
+                // a slim banner names what's missing and the dashboard stays.
+                if app.cliMissing { CLIMissingBanner() }
                 // 健康 fills the left column; to its right, one aligned 3×2 grid:
                 //   网络  CPU  GPU
                 //   电池  内存 磁盘
@@ -418,27 +422,23 @@ private struct AppRow: View {
     }
 }
 
-/// Shown when the `mo` binary cannot be located — the app is a front end, so
-/// this is a hard dependency and the message says so plainly.
-struct CLIMissingView: View {
+/// Shown when the `mo` binary cannot be located. The live metrics don't need it
+/// — only 健康评分, 机型, 电池, 蓝牙 and 已运行 come from `mo status` — so this is a
+/// banner over a working dashboard rather than a replacement for it.
+struct CLIMissingBanner: View {
     var body: some View {
-        VStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
-                .fill(Palette.panel)
-                .frame(width: 58, height: 58)
-                .overlay(
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 22, weight: .light))
-                        .foregroundStyle(Palette.fg(0.58))
-                )
-            Text("没有找到 mo")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(Palette.fg)
-            Text("lumac 依赖 mo 命令行工具来完成扫描和清理。")
-                .font(Typo.body)
-                .foregroundStyle(Palette.fg(0.58))
-                .multilineTextAlignment(.center)
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(Palette.danger)
+            Text("没有找到 mo 命令行工具：健康评分、机型、电池等信息暂时读不到，清理与分析功能也不可用。")
+                .font(Typo.aux)
+                .foregroundStyle(Palette.fg(0.82))
+            Spacer()
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Palette.danger.opacity(0.08),
+                    in: RoundedRectangle(cornerRadius: Radius.list, style: .continuous))
     }
 }

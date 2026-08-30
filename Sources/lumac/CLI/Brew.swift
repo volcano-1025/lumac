@@ -122,6 +122,11 @@ enum Brew {
     private static func run(_ args: [String], timeout: TimeInterval) async throws -> String {
         guard let path else { throw CLIError.notInstalled }
         return try await withCheckedThrowingContinuation { continuation in
+            // Draining the pipes and waiting blocks the thread for the whole run
+            // — up to the 1800s upgrade budget. On the Swift cooperative pool
+            // that would pin one of a handful of threads for half an hour, so
+            // the work goes to a background queue and the caller suspends here.
+            DispatchQueue.global(qos: .userInitiated).async {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: path)
             process.arguments = args
@@ -184,6 +189,7 @@ enum Brew {
                     status: process.terminationStatus, output: msg))
             } else {
                 continuation.resume(returning: String(data: outData, encoding: .utf8) ?? "")
+            }
             }
         }
     }

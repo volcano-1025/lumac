@@ -108,6 +108,10 @@ private struct ModePicker: View {
 private struct EntryList: View {
     var model: AnalyzeModel
     @State private var pendingTrash: AnalyzeEntry?
+    /// Why the last trash attempt failed. `Trash.isDeletable` refuses anything
+    /// outside the user's own space and the scratch areas, and analyze happily
+    /// lists such paths — swallowing the outcome made the button look broken.
+    @State private var trashError: String?
 
     var body: some View {
         Card(padding: 0) {
@@ -152,6 +156,14 @@ private struct EntryList: View {
         } message: {
             Text("将「\(pendingTrash?.name ?? "")」移入废纸篓，可以随时还原。")
         }
+        .alert("没能移入废纸篓", isPresented: .init(
+            get: { trashError != nil },
+            set: { if !$0 { trashError = nil } })
+        ) {
+            Button("好", role: .cancel) { trashError = nil }
+        } message: {
+            Text(trashError ?? "")
+        }
     }
 
     private func share(of entry: AnalyzeEntry) -> Double {
@@ -170,7 +182,15 @@ private struct EntryList: View {
 
     private func trash(_ entry: AnalyzeEntry) {
         Task {
-            _ = await Trash.run(paths: [entry.path]) { _, _ in }
+            let outcome = await Trash.run(paths: [entry.path]) { _, _ in }
+            if let failure = outcome.failed.first {
+                trashError = "\(Trash.abbreviate(failure.path))：\(failure.reason)"
+                return
+            }
+            guard !outcome.trashed.isEmpty else {
+                trashError = "\(Trash.abbreviate(entry.path)) 已经不在磁盘上了。"
+                return
+            }
             // Refresh the current listing so the removed row disappears.
             model.jump(to: model.trail.count - 1)
         }

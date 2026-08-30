@@ -47,10 +47,13 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
     /// The item is plain AppKit, so it cannot pick up `@Observable` changes on
     /// its own; the tracking closure re-arms itself after each change.
     private func observeStatus() {
+        // `app` is read out first so the tracking closure doesn't implicitly
+        // capture self strongly alongside the weak capture in `onChange`.
+        let app = self.app
         withObservationTracking {
             _ = app.status
-        } onChange: {
-            Task { @MainActor [weak self] in
+        } onChange: { [weak self] in
+            Task { @MainActor in
                 self?.refreshItem()
                 self?.observeStatus()
             }

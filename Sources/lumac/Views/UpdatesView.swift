@@ -45,7 +45,11 @@ private struct LoadedList: View {
                     .font(Typo.aux)
                     .foregroundStyle(Palette.fg(0.58))
                 Spacer()
+                // 刷新 cancels the model's task and resets per-item state, so
+                // it must stay out of reach while 全部更新 is mid-run.
                 SecondaryButton(title: "刷新") { model.reload() }
+                    .disabled(model.allRunning)
+                    .opacity(model.allRunning ? 0.5 : 1)
                 PrimaryButton(title: "全部更新") { model.upgradeAll() }
                     .disabled(model.allRunning)
                     .opacity(model.allRunning ? 0.5 : 1)
