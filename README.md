@@ -63,8 +63,6 @@ open build/lumac.app
 自签名不被 Gatekeeper 信任，所以下载后首次打开需绕过一次（见[下载](#下载)）；因为指定要求锚定的是证书而非
 二进制哈希，之后的更新会保留已授予的权限，不会反复要求重新授权。
 
-要做到无摩擦分发需要 Developer ID + 公证（$99/年）；改 `build.sh` 的 `LUMAC_SIGN_ID` 即可换签名身份。
-
 ## 致谢
 
 实际的清理/优化/分析由 [tw93/Mole](https://github.com/tw93/Mole) 完成，lumac 只负责把它包装成原生图形界面。
