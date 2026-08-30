@@ -8,6 +8,19 @@
 >
 > 另有一份写死的保护名单（AI 会话记录、本地模型权重、照片/邮件资料库等不可再生的内容），无论扫描结果怎么说都不会被删除。
 
+## 下载
+
+从 [Releases](https://github.com/volcano-1025/lumac/releases/latest) 下载 `lumac-<版本>.dmg`，打开后把 lumac 拖进「应用程序」。
+
+**首次打开需要绕过一次 Gatekeeper**——发布的包是自签名、未经 Apple 公证的：
+
+```bash
+xattr -dr com.apple.quarantine /Applications/lumac.app
+```
+
+或者在「应用程序」里 **右键 → 打开**，在弹窗里再点一次「打开」。之后的更新不用重复这一步（原因见
+[签名与授权](#签名与授权)）。
+
 ## 功能
 
 - **概览** — 健康评分、CPU / GPU / 内存 / 磁盘、网络实时图、电池与配件、占用最高的进程。
@@ -47,8 +60,10 @@ open build/lumac.app
 ./scripts/make-signing-cert.sh
 ```
 
-自签名不被 Gatekeeper 信任，所以**下载后首次打开**需绕过一次（右键 → 打开，或
-`xattr -dr com.apple.quarantine /path/to/lumac.app`）；之后更新会保留已授予的权限。
+自签名不被 Gatekeeper 信任，所以下载后首次打开需绕过一次（见[下载](#下载)）；因为指定要求锚定的是证书而非
+二进制哈希，之后的更新会保留已授予的权限，不会反复要求重新授权。
+
+要做到无摩擦分发需要 Developer ID + 公证（$99/年）；改 `build.sh` 的 `LUMAC_SIGN_ID` 即可换签名身份。
 
 ## 致谢
 
