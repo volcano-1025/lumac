@@ -57,7 +57,7 @@ enum ProcessLister {
     private static func run(limit: Int) -> [ProcessRow] {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/ps")
-        // rss is in kilobytes; comm gives the executable name without arguments.
+        // rss is in kilobytes; comm gives the executable path without arguments.
         process.arguments = ["-Aro", "pid=,pcpu=,pmem=,rss=,comm="]
 
         let pipe = Pipe()
@@ -83,7 +83,12 @@ enum ProcessLister {
                   let mem = Double(fields[2]),
                   let rssKB = Int64(fields[3]) else { continue }
 
-            let path = String(fields[4])
+            // `ps` renders non-ASCII bytes in cat -v form — 抖音's bundle comes
+            // back as "M-fM^JM^VM-iM^_M-3.app" — so the path matches nothing on
+            // disk, the bundle lookup fails, and the escaped bytes end up shown
+            // as the app's name. Ask the kernel for the real path instead and
+            // keep `comm` only as a fallback.
+            let path = executablePath(pid) ?? String(fields[4])
             // Prefer the phys_footprint (what Activity Monitor shows) over `ps`'s
             // RSS, which double-counts shared framework pages and overstates every
             // app's memory. Falls back to RSS for processes we cannot query.
@@ -99,6 +104,17 @@ enum ProcessLister {
             if rows.count >= limit { break }
         }
         return rows
+    }
+
+    /// The executable path straight from the kernel, in raw UTF-8. Unlike
+    /// `ps`, `proc_pidpath` applies no escaping; it covers every process on
+    /// the system, root-owned daemons included.
+    private static func executablePath(_ pid: Int32) -> String? {
+        // PROC_PIDPATHINFO_MAXSIZE (4 * MAXPATHLEN); the macro itself does not
+        // survive the Swift importer, so the value is spelled out.
+        var buffer = [CChar](repeating: 0, count: 4 * Int(PATH_MAX))
+        guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
+        return String(cString: buffer)
     }
 
     /// Per-process physical footprint via `proc_pid_rusage`. Nil for processes
