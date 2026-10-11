@@ -79,6 +79,9 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
 
         let popover = self.popover ?? makePopover()
         self.popover = popover
+        // Lets the poll loop resume `mo status` and the process list, which it
+        // skips while nothing but the menu bar item is on screen.
+        app.hudVisible = true
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
         // Bring the HUD forward without activating the whole app, so clicking
         // the menu bar does not raise the main window.
@@ -94,6 +97,10 @@ final class MenuBarController: NSObject, NSPopoverDelegate {
             rootView: MenuBarHUD().environment(app))
         popover.contentSize = NSSize(width: Metrics.hudWidth, height: 420)
         return popover
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        app.hudVisible = false
     }
 }
 

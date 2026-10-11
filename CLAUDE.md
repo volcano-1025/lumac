@@ -32,7 +32,7 @@ Swift 6 工具链 / 语言模式 v5 · SwiftUI · SwiftPM · macOS 26。无资�
 ## 约定与要点
 
 - **命名**:全项目统一 **lumac** —— SwiftPM target / 可执行文件 / 模块 / `LumacApp` / 资源 bundle(`lumac_lumac.bundle`)都叫 lumac。
-- 实时指标一律走原生 syscall,不用 `mo status`(它每次冷启动,速率/负载这类差值不可靠);`mo status` 只供健康评分、机型、电池、蓝牙、温度这些它专有的字段,2 秒一次;原生指标 1 秒一次。
+- 实时指标一律走原生 syscall,不用 `mo status`(它每次冷启动,速率/负载这类差值不可靠);`mo status` 只供健康评分、机型、电池、蓝牙、温度这些它专有的字段,**30 秒一次且只在主窗口可见(未关/未最小化/未被遮挡)或 HUD 打开时跑**,进程列表同样只在可见时刷;原生指标 1 秒一次、始终跑(菜单栏图标只用它)。原来 2 秒一次、全天候:`mo status` 是 bash 脚本,每次 fork ~300 个子进程、~1 秒 CPU,常驻占 ~35% 核,让 lumac 上了系统「使用大量能耗」,别改回去。
 - 进程列表只显示「真正的应用」:有 .app bundle 且非后台代理(`ProcessLister.isListed` / `isSystemAgent`,按 Info.plist 的 `LSBackgroundOnly` / `/System` 下的 `LSUIElement` 判定),外加 `listedSystemProcesses` 白名单(目前仅 WindowServer)。名字用 `FileManager.displayName` 取本地化名(访达 / 备忘录 …)。
 - 注释解释「为什么」,与现有高密度注释风格保持一致。
 

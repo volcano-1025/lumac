@@ -275,6 +275,28 @@ final class AppState {
 
     private var pollTask: Task<Void, Never>?
 
+    /// Whether the menu bar HUD is showing. Set by `MenuBarController`.
+    @ObservationIgnored var hudVisible = false
+    /// When `mo status` last ran, to space it out (see `statusInterval`).
+    @ObservationIgnored private var lastCLIStatus: Date?
+
+    /// `mo status` is a bash script that forks ~300 processes and burns about a
+    /// second of CPU per call. Run every other second it kept a third of a core
+    /// busy around the clock and put lumac on macOS's 使用大量能耗 list. Its
+    /// fields — health score, model, battery, bluetooth, uptime — move slowly,
+    /// so 30 seconds is plenty.
+    private static let statusInterval: TimeInterval = 30
+
+    /// Someone is looking at data beyond the menu bar item. The item itself
+    /// shows only memory % and network rates, both measured natively, so with
+    /// the window closed (or minimised, or covered) and the HUD shut, neither
+    /// `mo status` nor the process list has a reader.
+    private var detailVisible: Bool {
+        if hudVisible { return true }
+        guard let window = mainWindow else { return false }
+        return window.isVisible && window.occlusionState.contains(.visible)
+    }
+
     /// Previous native network sample, for computing throughput across polls.
     private var prevNet: [String: NetworkStats.Counters] = [:]
     private var prevNetTime: Date?
@@ -306,10 +328,17 @@ final class AppState {
         pollTask = Task { [weak self] in
             var tick = 0
             while !Task.isCancelled {
-                // The CLI-only fields change slowly, so `mo status` and the full
-                // process list run every other tick; the native metrics refresh
-                // every second.
-                if tick % 2 == 0 { await self?.slowRefresh() }
+                // Native metrics refresh every second. The process list runs
+                // every other tick and `mo status` every `statusInterval`, both
+                // only while the window or HUD is on screen. A stale snapshot is
+                // caught up on the first tick after one reappears.
+                if let self, self.detailVisible {
+                    let due = self.lastCLIStatus.map {
+                        Date().timeIntervalSince($0) >= Self.statusInterval
+                    } ?? true
+                    if due { await self.refreshCLIStatus() }
+                    if tick % 2 == 0 || due { await self.refreshProcesses() }
+                }
                 self?.fastRefresh()
                 tick &+= 1
                 try? await Task.sleep(for: .seconds(1))
@@ -322,8 +351,9 @@ final class AppState {
         pollTask = nil
     }
 
-    /// `mo status` for the fields only it provides, plus the process list.
-    private func slowRefresh() async {
+    /// `mo status` for the fields only it provides.
+    private func refreshCLIStatus() async {
+        lastCLIStatus = Date()
         do {
             cliSnapshot = try await MoCLI.shared.status()
             statusError = nil
@@ -334,6 +364,10 @@ final class AppState {
         } catch {
             statusError = error.localizedDescription
         }
+    }
+
+    /// The process list (cheap: one `ps` plus a syscall per process).
+    private func refreshProcesses() async {
         processes = await ProcessLister.list()
         fdaGranted = FullDiskAccess.granted
     }
