@@ -34,10 +34,15 @@ enum Brew {
     static var isInstalled: Bool { path != nil }
 
     /// `brew outdated --json=v2` → casks first (the apps), then formulae.
-    static func outdated() async throws -> [BrewUpdate] {
-        // Metadata-only: with the mirror this returns in ~2s, so a tight cap
-        // turns a wedged network into a clear error instead of an endless spinner.
-        let output = try await run(["outdated", "--json=v2"], timeout: 60)
+    ///
+    /// `force` is the 刷新 button: refresh the index no matter how fresh it is.
+    /// The automatic load settles for an hour-old index, so re-opening the page
+    /// doesn't re-fetch on every visit.
+    static func outdated(force: Bool = false) async throws -> [BrewUpdate] {
+        // Metadata plus (at most) an index refresh: the JSON index is ~15 MB,
+        // so this gets a much wider budget than the ~2s a warm run takes.
+        let output = try await run(["outdated", "--json=v2"], timeout: 180,
+                                   refreshIndex: force ? .force : .hourly)
         guard let data = output.data(using: .utf8), !data.isEmpty else { return [] }
 
         struct Entry: Decodable {
@@ -61,6 +66,26 @@ enum Brew {
             }
         }
         return map(env.casks, .cask) + map(env.formulae, .formula)
+    }
+
+    /// The version homebrew-core's formula currently offers for `name` — i.e.
+    /// what a `brew upgrade` could actually install right now — or nil if brew
+    /// or the formula isn't there.
+    ///
+    /// Reads the same index 更新页 compares against, so the two can't disagree.
+    /// Needed because a GitHub release lands hours before homebrew-core bumps
+    /// (mole's formula is `autobump: false` / `bumped_by_upstream`, so upstream
+    /// has to open the PR itself), and in that window "用 Homebrew 更新" is a
+    /// button that does nothing.
+    static func formulaVersion(_ name: String) async -> String? {
+        guard let output = try? await run(["info", "--json=v2", name], timeout: 180,
+                                          refreshIndex: .hourly),
+              let data = output.data(using: .utf8) else { return nil }
+        struct Versions: Decodable { var stable: String? }
+        struct Formula: Decodable { var versions: Versions }
+        struct Envelope: Decodable { var formulae: [Formula] }
+        let envelope = try? JSONDecoder().decode(Envelope.self, from: data)
+        return envelope?.formulae.first?.versions.stable
     }
 
     /// Maps a normalized app name to its bundle path, so a cask token like
@@ -93,6 +118,8 @@ enum Brew {
         args.append(item.name)
         // An upgrade downloads and installs a bottle/app, so it needs a much
         // larger budget than the metadata check — big casks can take a while.
+        // No index refresh here: install from the same snapshot the list was
+        // built on, so the version shown in the row is the version installed.
         return (try? await run(args, timeout: 1800)) != nil
     }
 
@@ -105,6 +132,32 @@ enum Brew {
     private static let mirrorAPIDomain = "https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles/api"
     private static let mirrorBottleDomain = "https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles"
 
+    /// A curl config that aborts a transfer stuck below 1 KB/s for 30 seconds.
+    ///
+    /// brew's curl has `--retry` and `--continue-at` but no low-speed limit, so a
+    /// connection that goes silent without closing — seen through a TUN proxy
+    /// (Egern): ESTABLISHED, zero bytes for 15 minutes, while a fresh request
+    /// for the same dmg finished in 6s — hangs until our 1800s timeout. With
+    /// this, curl gives up on the dead connection and its own retry resumes the
+    /// partial download on a new one. Passed via `HOMEBREW_CURLRC`, which brew
+    /// hands to curl as `--config`.
+    private static func stallAbortingCurlrc() -> String? {
+        guard let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        else { return nil }
+        let dir = support.appendingPathComponent("lumac", isDirectory: true)
+        let file = dir.appendingPathComponent("brew.curlrc")
+        let contents = "speed-limit = 1024\nspeed-time = 30\n"
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            if (try? String(contentsOf: file, encoding: .utf8)) != contents {
+                try contents.write(to: file, atomically: true, encoding: .utf8)
+            }
+            return file.path
+        } catch {
+            return nil
+        }
+    }
+
     /// Thread-safe one-shot flag: set by the timeout killer, read after the
     /// process exits to distinguish a kill-on-timeout from an ordinary failure.
     private final class Flag: @unchecked Sendable {
@@ -114,12 +167,44 @@ enum Brew {
         var isSet: Bool { lock.lock(); defer { lock.unlock() }; return value }
     }
 
+    /// How stale an index `run` will settle for.
+    ///
+    /// `brew outdated` compares against a cached formula index, never the
+    /// network, so with `HOMEBREW_NO_AUTO_UPDATE=1` on every call the index
+    /// froze at whatever the user's last terminal `brew` left behind — mole
+    /// 1.55.0 shipped and the page kept listing the other seven packages,
+    /// because to this brew 1.54.0 *was* the latest. `HOMEBREW_AUTO_UPDATE_SECS`
+    /// buys the refresh back without the "check on every single command" cost.
+    private enum RefreshIndex {
+        /// Never refresh — for commands that should act on the index as-is.
+        case off
+        /// Refresh if the index is over an hour old.
+        case hourly
+        /// Refresh unconditionally (the 刷新 button).
+        case force
+
+        /// Applied over the inherited environment. The refreshing cases *clear*
+        /// `HOMEBREW_NO_AUTO_UPDATE` rather than just setting the interval: a
+        /// user who set it globally (`launchctl setenv`) would otherwise keep
+        /// the frozen index this whole mechanism exists to thaw.
+        func apply(to env: inout [String: String]) {
+            switch self {
+            case .off:
+                env["HOMEBREW_NO_AUTO_UPDATE"] = "1"
+            case .hourly, .force:
+                env["HOMEBREW_NO_AUTO_UPDATE"] = nil
+                env["HOMEBREW_AUTO_UPDATE_SECS"] = self == .force ? "1" : "3600"
+            }
+        }
+    }
+
     /// Runs `brew` and returns stdout, throwing on a non-zero exit. `timeout`
     /// caps the wall-clock wait: on expiry the process and its curl children are
     /// killed so the pipe reads unblock and we throw `.timedOut` instead of
     /// spinning forever.
     @discardableResult
-    private static func run(_ args: [String], timeout: TimeInterval) async throws -> String {
+    private static func run(_ args: [String], timeout: TimeInterval,
+                            refreshIndex: RefreshIndex = .off) async throws -> String {
         guard let path else { throw CLIError.notInstalled }
         return try await withCheckedThrowingContinuation { continuation in
             // Draining the pipes and waiting blocks the thread for the whole run
@@ -133,10 +218,14 @@ enum Brew {
             process.standardInput = FileHandle.nullDevice
             // A no-TTY sudo prompt then fails fast instead of hanging.
             var env = ProcessInfo.processInfo.environment
-            env["HOMEBREW_NO_AUTO_UPDATE"] = "1"
+            refreshIndex.apply(to: &env)
             env["HOMEBREW_NO_COLOR"] = "1"
+            // Auto-update's progress chatter goes to stderr, which we only read
+            // on failure — but silence it anyway so a failure's message is brew's.
+            env["HOMEBREW_NO_ENV_HINTS"] = "1"
             if env["HOMEBREW_API_DOMAIN"] == nil { env["HOMEBREW_API_DOMAIN"] = mirrorAPIDomain }
             if env["HOMEBREW_BOTTLE_DOMAIN"] == nil { env["HOMEBREW_BOTTLE_DOMAIN"] = mirrorBottleDomain }
+            if env["HOMEBREW_CURLRC"] == nil, let curlrc = stallAbortingCurlrc() { env["HOMEBREW_CURLRC"] = curlrc }
             process.environment = env
 
             let out = Pipe()

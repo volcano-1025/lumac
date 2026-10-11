@@ -7,6 +7,13 @@ enum UpdateChecker {
     struct Update: Equatable {
         var current: String
         var latest: String
+        /// Whether Homebrew can install `latest` *yet*. GitHub is hours ahead of
+        /// homebrew-core, and during that gap 更新页 correctly lists nothing
+        /// while this check shouts "有新版" — the split that made the alert's
+        /// Homebrew button a no-op. Without brew the question doesn't arise
+        /// (`mo update` is the path), so it stays true and the wording is
+        /// unchanged.
+        var brewReady: Bool = true
     }
 
     /// The result for one component. Distinguishes "already latest" from "not
@@ -31,7 +38,9 @@ enum UpdateChecker {
         var line: String {
             switch outcome {
             case .upToDate(let v):  return "\(name) 已是最新版本（v\(v)）"
-            case .updatable(let u): return "\(name) 有新版本：\(u.current) → \(u.latest)"
+            case .updatable(let u):
+                let base = "\(name) 有新版本：\(u.current) → \(u.latest)"
+                return u.brewReady ? base : base + "（Homebrew 还没收录，稍后再更新）"
             case .notInstalled:     return "没有检测到 \(name)"
             case .noReleases:       return "\(name) 暂无发布版本"
             case .failed:           return "\(name) 检查失败，请检查网络"
@@ -73,18 +82,27 @@ enum UpdateChecker {
         guard let current = await MoCLI.shared.version() else { return .notInstalled }
         switch await latestTag(owner: "tw93", repo: "Mole") {
         case .tag(let latest):
-            return isNewer(latest, than: current)
-                ? .updatable(Update(current: current, latest: latest))
-                : .upToDate(current: current)
+            guard isNewer(latest, than: current) else { return .upToDate(current: current) }
+            return .updatable(Update(current: current, latest: latest,
+                                     brewReady: await brewCanInstall(latest)))
         case .noReleases, .error: return .failed
         }
     }
 
-    /// Returns the mole version pair when an update exists, else nil. Used by the
-    /// silent launch check; `all()` backs the manual, message-bearing check.
+    /// Whether brew's mole formula has caught up to `version`.
+    private static func brewCanInstall(_ version: String) async -> Bool {
+        guard Brew.isInstalled else { return true }
+        guard let packaged = await Brew.formulaVersion("mole") else { return false }
+        return !isNewer(version, than: packaged)
+    }
+
+    /// The mole update for the *silent launch* check — nil unless the user can
+    /// actually act on it. An unprompted alert whose only advice is "wait a few
+    /// hours for homebrew-core" is exactly the nagging lumac doesn't do; the
+    /// manual 检查更新 still reports the gap, because there someone asked.
     static func mole() async -> Update? {
-        if case .updatable(let u) = await moleOutcome() { return u }
-        return nil
+        guard case .updatable(let u) = await moleOutcome(), u.brewReady else { return nil }
+        return u
     }
 
     // MARK: - GitHub

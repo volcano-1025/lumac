@@ -187,7 +187,9 @@ final class AppState {
 
     /// Upgrades mole via Homebrew, then re-checks so the alert reflects reality.
     func updateMole() {
-        guard let update = moleUpdate else { return }
+        // brewReady guards the case homebrew-core hasn't bumped yet: the upgrade
+        // would exit 0 having installed nothing, and the alert would re-appear.
+        guard let update = moleUpdate, update.brewReady else { return }
         Task {
             let item = BrewUpdate(name: "mole", kind: .formula,
                                   current: update.current, latest: update.latest)

@@ -138,8 +138,10 @@ struct SettingsView: View {
         return checks.map(\.line).joined(separator: "\n")
     }
 
+    /// Only an update brew can actually install — otherwise the row keeps its
+    /// 检查 button and the text explains the wait (see `Update.brewReady`).
     private var moleUpdate: UpdateChecker.Update? {
-        checks.first { $0.name == "mole" }?.update
+        checks.first { $0.name == "mole" }?.update.flatMap { $0.brewReady ? $0 : nil }
     }
     private var lumacUpdatable: Bool {
         checks.contains { $0.name == "lumac" && $0.isUpdatable }

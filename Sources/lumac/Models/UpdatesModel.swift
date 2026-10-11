@@ -44,7 +44,9 @@ final class UpdatesModel {
         reload()
     }
 
-    func reload() {
+    /// `force` comes from the 刷新 button — someone pressing it wants brew's
+    /// index refreshed, not just a re-read of the one already on disk.
+    func reload(force: Bool = false) {
         task?.cancel()
         guard Brew.isInstalled else { phase = .noBrew; return }
         phase = .loading
@@ -52,7 +54,7 @@ final class UpdatesModel {
         summary = nil
         task = Task {
             do {
-                let items = try await Brew.outdated()
+                let items = try await Brew.outdated(force: force)
                 guard !Task.isCancelled else { return }
                 self.items = items
                 self.phase = items.isEmpty ? .empty : .loaded

@@ -26,7 +26,9 @@ struct RootView: View {
             app.checkForUpdatesOnce()
         }
         .alert("检查更新", isPresented: $app.showingManualCheck) {
-            if app.manualChecks.contains(where: { $0.name == "mole" && $0.isUpdatable }), Brew.isInstalled {
+            // Only when brew can actually install it — see Update.brewReady.
+            if app.manualChecks.first(where: { $0.name == "mole" })?.update?.brewReady == true,
+               Brew.isInstalled {
                 Button("用 Homebrew 更新 mole") { app.updateMole() }
             }
             if app.manualChecks.contains(where: { $0.name == "lumac" && $0.isUpdatable }) {
